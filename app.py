@@ -28,11 +28,18 @@ PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 
-app = Flask(__name__) 
-app.secret_key = os.environ.get(
-    "SECRET_KEY",
-    "development-secret-key"
+app = Flask(__name__)
+
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+
+app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
+
+UPLOAD_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True
 )
+
+app.secret_key = os.environ.get(
 
 
 FEATURES = [
@@ -301,88 +308,100 @@ def dashboard():
 def students():
 
     if "admin" not in session:
-
-        return redirect(
-            url_for("login")
-        )
+        return redirect(url_for("login"))
 
     if request.method == "POST":
 
         try:
-            profile_picture = request.files.get("profile_picture")
+            profile_picture = request.files.get(
+                "profile_picture"
+            )
 
-            if profile_picture and profile_picture.filename:
+            if (
+                profile_picture
+                and profile_picture.filename
+            ):
                 profile_picture.save(
-                    UPLOAD_FOLDER / profile_picture.filename
+                    UPLOAD_FOLDER
+                    / profile_picture.filename
                 )
 
             values = {
-
-                "attendance":
-                    float(
-                        request.form[
-                            "attendance"
-                        ]
-                    ),
-
-                "cgpa":
-                    float(
-                        request.form[
-                            "cgpa"
-                        ]
-                    ),
-
-                "internal_marks":
-                    float(
-                        request.form[
-                            "internal_marks"
-                        ]
-                    ),
-
-                "projects":
-                    int(
-                        request.form[
-                            "projects"
-                        ]
-                    ),
-
-                "skills_score":
-                    float(
-                        request.form[
-                            "skills_score"
-                        ]
-                    ),
-
-                "aptitude_score":
-                    float(
-                        request.form[
-                            "aptitude_score"
-                        ]
-                    ),
-
-                "communication_score":
-                    float(
-                        request.form[
-                            "communication_score"
-                        ]
-                    )
-            }
-ranges = [
-    (values["attendance"], 0, 100),
-    (values["cgpa"], 0, 10),
-    (values["internal_marks"], 0, 100),
-    (values["projects"], 0, 20),
-    (values["skills_score"], 0, 100),
-    (values["aptitude_score"], 0, 100),
-    (values["communication_score"], 0, 100)
-]
-
-for value, minimum, maximum in ranges:
-    if not (minimum <= value <= maximum):
-        raise ValueError
-     performance, probability, status = (
-        predict_student(values)
+                "attendance": float(
+                    request.form["attendance"]
+                ),
+                "cgpa": float(
+                    request.form["cgpa"]
+                ),
+                "internal_marks": float(
+                    request.form["internal_marks"]
+                ),
+                "projects": int(
+                    request.form["projects"]
+                ),
+                "skills_score": float(
+                    request.form["skills_score"]
+                ),
+                "aptitude_score": float(
+                    request.form["aptitude_score"]
+                ),
+                "communication_score": float(
+                    request.form[
+                        "communication_score"
+                    ]
                 )
+            }
+
+            ranges = [
+                (
+                    values["attendance"],
+                    0,
+                    100
+                ),
+                (
+                    values["cgpa"],
+                    0,
+                    10
+                ),
+                (
+                    values["internal_marks"],
+                    0,
+                    100
+                ),
+                (
+                    values["projects"],
+                    0,
+                    20
+                ),
+                (
+                    values["skills_score"],
+                    0,
+                    100
+                ),
+                (
+                    values["aptitude_score"],
+                    0,
+                    100
+                ),
+                (
+                    values["communication_score"],
+                    0,
+                    100
+                )
+            ]
+
+            for value, minimum, maximum in ranges:
+
+                if not (
+                    minimum
+                    <= value
+                    <= maximum
+                ):
+                    raise ValueError
+
+            performance, probability, status = (
+                predict_student(values)
+            )
 
             connection = get_database()
 
@@ -422,36 +441,31 @@ for value, minimum, maximum in ranges:
                     request.form[
                         "department"
                     ].strip(),
-                    profile_picture.filename if profile_picture else None,
+
+                    (
+                        profile_picture.filename
+                        if profile_picture
+                        else None
+                    ),
 
                     request.form[
                         "year"
                     ].strip(),
 
                     values["attendance"],
-
                     values["cgpa"],
-
                     values["internal_marks"],
-
                     values["projects"],
-
                     values["skills_score"],
-
                     values["aptitude_score"],
-
                     values["communication_score"],
-
                     performance,
-
                     probability,
-
                     status
                 )
             )
 
             connection.commit()
-
             connection.close()
 
             flash(
@@ -469,14 +483,16 @@ for value, minimum, maximum in ranges:
                 "Roll number already exists.",
                 "danger"
             )
-  except (
-      KeyError,
-      ValueError
-  ):
-      flash(
-         "Please enter valid values.",
-         "danger"
-  )
+
+        except (
+            KeyError,
+            ValueError
+        ):
+
+            flash(
+                "Please enter valid values.",
+                "danger"
+            )
 
     connection = get_database()
 
@@ -494,17 +510,15 @@ for value, minimum, maximum in ranges:
         "students.html",
         students=student_list
     )
-    @app.route("/uploads/<filename>")
-    def uploaded_file(filename):
-        return send_from_directory(
-            UPLOAD_FOLDER,
-               filename
+
+
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+
+    return send_from_directory(
+        UPLOAD_FOLDER,
+        filename
     )
-
-
-@app.route(
-    "/student/<int:student_id>"
-)
 def student_detail(student_id):
 
     if "admin" not in session:
