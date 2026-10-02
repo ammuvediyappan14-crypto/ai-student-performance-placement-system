@@ -419,9 +419,7 @@ def students():
             ]
  for value, minimum, maximum in ranges:
      if not (minimum <= value <= maximum):
-        raise ValueError(
-            f"Value must be between {minimum} and {maximum}."
-        )
+        raise ValueError
 
  performance, probability, status = (
      predict_student(values)
@@ -515,9 +513,9 @@ def students():
   except (
       KeyError,
       ValueError
-  ):as e:
+  ):
       flash(
-         "Please enter valid values: {e}",
+         "Please enter valid values.",
          "danger"
   )
 
