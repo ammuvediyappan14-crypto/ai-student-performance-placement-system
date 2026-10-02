@@ -374,56 +374,21 @@ def students():
             }
 
             ranges = [
+                   (values["attendance"], 0, 100),
+                   (values["cgpa"], 0, 10),
+                   (values["internal_marks"], 0, 100),
+                   (values["projects"], 0, 20),
+                   (values["skills_score"], 0, 100),
+                   (values["aptitude_score"], 0, 100),
+                   (values["communication_score"], 0, 100)
+                     ]
 
-                (
-                    values["attendance"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["cgpa"],
-                    0,
-                    10
-                ),
-
-                (
-                    values["internal_marks"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["projects"],
-                    0,
-                    20
-                ),
-
-                (
-                    values["skills_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["aptitude_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["communication_score"],
-                    0,
-                    100
+               for value, minimum, maximum in ranges:
+                   if not (minimum <= value <= maximum):
+                       raise ValueError
+     performance, probability, status = (
+        predict_student(values)
                 )
-            ]
- for value, minimum, maximum in ranges:
-     if not (minimum <= value <= maximum):
-        raise ValueError
-
- performance, probability, status = (
-     predict_student(values)
-       )
 
             connection = get_database()
 
