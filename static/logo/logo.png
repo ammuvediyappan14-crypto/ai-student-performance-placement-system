@@ -1,3 +1,1 @@
-static/
-└── logo/
-    └── logo.png
+{{ url_for('static', filename='logo/logo.png') }}
