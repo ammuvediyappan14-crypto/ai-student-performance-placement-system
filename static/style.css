@@ -1,0 +1,62 @@
+body {
+    background-color: #f5f6f8;
+    min-height: 100vh;
+}
+
+.navbar {
+    margin-bottom: 10px;
+}
+
+.card {
+    border: none;
+    border-radius: 12px;
+}
+
+.stat-card {
+    transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+}
+
+.stat-card h6 {
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+.stat-card h2 {
+    font-weight: 700;
+}
+
+.result-box {
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-box h2 {
+    font-weight: 700;
+}
+
+.table {
+    vertical-align: middle;
+}
+
+.table th {
+    white-space: nowrap;
+}
+
+.btn {
+    border-radius: 7px;
+}
+
+.form-control,
+.form-select {
+    border-radius: 7px;
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0 !important;
+}
