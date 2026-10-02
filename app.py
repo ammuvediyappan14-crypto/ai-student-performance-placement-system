@@ -13,22 +13,19 @@ import os
 import pickle
 import sqlite3
 from pathlib import Path
-
 import numpy as np
 
 
 # ============================================================
-# PATHS
+# PROJECT PATHS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 
 DATABASE = BASE_DIR / "student_system.db"
-
 MODEL_DIR = BASE_DIR / "models"
 
 PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
-
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 UPLOAD_FOLDER = BASE_DIR / "uploads"
@@ -45,6 +42,11 @@ app.secret_key = os.environ.get(
     "development-secret-key"
 )
 
+# Session settings
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# Upload settings
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 
 UPLOAD_FOLDER.mkdir(
@@ -54,7 +56,7 @@ UPLOAD_FOLDER.mkdir(
 
 
 # ============================================================
-# FEATURES
+# ML FEATURES
 # ============================================================
 
 FEATURES = [
@@ -69,20 +71,23 @@ FEATURES = [
 
 
 # ============================================================
-# DATABASE
+# DATABASE CONNECTION
 # ============================================================
 
 def get_database():
 
     connection = sqlite3.connect(
-        DATABASE,
-        timeout=10
+        DATABASE
     )
 
     connection.row_factory = sqlite3.Row
 
     return connection
 
+
+# ============================================================
+# INITIALIZE DATABASE
+# ============================================================
 
 def initialize_database():
 
@@ -133,10 +138,13 @@ def initialize_database():
             placement_probability REAL,
 
             placement_status TEXT
-
         )
         """
     )
+
+    # --------------------------------------------------------
+    # Check existing database columns
+    # --------------------------------------------------------
 
     columns = connection.execute(
         "PRAGMA table_info(students)"
@@ -146,6 +154,10 @@ def initialize_database():
         column["name"]
         for column in columns
     ]
+
+    # --------------------------------------------------------
+    # Add profile_picture if old database doesn't have it
+    # --------------------------------------------------------
 
     if "profile_picture" not in column_names:
 
@@ -162,7 +174,7 @@ def initialize_database():
 
 
 # ============================================================
-# LOAD MODELS
+# LOAD / TRAIN ML MODELS
 # ============================================================
 
 def load_models():
@@ -206,9 +218,10 @@ def load_models():
 
 def predict_student(values):
 
-    performance_model, placement_model = (
-        load_models()
-    )
+    (
+        performance_model,
+        placement_model
+    ) = load_models()
 
     input_data = np.array(
         [
@@ -225,9 +238,9 @@ def predict_student(values):
     )[0]
 
     probability = (
-        placement_model.predict_proba(
-            input_data
-        )[0][1] * 100
+        placement_model
+        .predict_proba(input_data)[0][1]
+        * 100
     )
 
     probability = round(
@@ -290,12 +303,20 @@ def login():
             ""
         )
 
+        # ----------------------------------------------------
+        # ADMIN LOGIN
+        # ----------------------------------------------------
+
         if (
             username == "admin"
             and password == "admin123"
         ):
 
+            session.clear()
+
             session["admin"] = username
+
+            session.permanent = True
 
             return redirect(
                 url_for("dashboard")
@@ -340,12 +361,20 @@ def dashboard():
 
     connection = get_database()
 
+    # --------------------------------------------------------
+    # Total students
+    # --------------------------------------------------------
+
     total_students = connection.execute(
         """
         SELECT COUNT(*) AS count
         FROM students
         """
     ).fetchone()["count"]
+
+    # --------------------------------------------------------
+    # Placed students
+    # --------------------------------------------------------
 
     placed_students = connection.execute(
         """
@@ -358,6 +387,10 @@ def dashboard():
         )
     ).fetchone()["count"]
 
+    # --------------------------------------------------------
+    # Average CGPA
+    # --------------------------------------------------------
+
     average_cgpa = connection.execute(
         """
         SELECT AVG(cgpa) AS average
@@ -365,12 +398,20 @@ def dashboard():
         """
     ).fetchone()["average"]
 
+    # --------------------------------------------------------
+    # Average placement probability
+    # --------------------------------------------------------
+
     average_probability = connection.execute(
         """
         SELECT AVG(placement_probability) AS average
         FROM students
         """
     ).fetchone()["average"]
+
+    # --------------------------------------------------------
+    # Recent students
+    # --------------------------------------------------------
 
     recent_students = connection.execute(
         """
@@ -386,6 +427,7 @@ def dashboard():
     return render_template(
         "dashboard.html",
 
+        # Names used by dashboard.html
         total_students=total_students,
 
         placed_students=placed_students,
@@ -408,15 +450,15 @@ def dashboard():
 # STUDENTS
 # ============================================================
 
-@app.route("/test-students")
-def test_students():
-    return "STUDENTS ROUTE IS WORKING"
-    
 @app.route(
     "/students",
     methods=["GET", "POST"]
 )
 def students():
+
+    # --------------------------------------------------------
+    # LOGIN CHECK
+    # --------------------------------------------------------
 
     if "admin" not in session:
 
@@ -425,335 +467,320 @@ def students():
         )
 
     # ========================================================
-    # GET - OPEN STUDENT REGISTRATION PAGE
-    # ========================================================
-
-    if request.method == "GET":
-
-        try:
-
-            connection = get_database()
-
-            student_list = connection.execute(
-                """
-                SELECT *
-                FROM students
-                ORDER BY id DESC
-                """
-            ).fetchall()
-
-            connection.close()
-
-        except sqlite3.Error as error:
-
-            print(
-                "DATABASE READ ERROR:",
-                error
-            )
-
-            student_list = []
-
-            flash(
-                "Unable to read student records.",
-                "danger"
-            )
-
-        return render_template(
-            "students.html",
-            students=student_list
-        )
-
-    # ========================================================
     # POST - ADD STUDENT
     # ========================================================
 
-    connection = None
+    if request.method == "POST":
 
-    try:
+        try:
 
-        # ----------------------------------------------------
-        # PROFILE PHOTO
-        # ----------------------------------------------------
+            # ------------------------------------------------
+            # PROFILE PICTURE
+            # ------------------------------------------------
 
-        profile_picture = request.files.get(
-            "profile_picture"
-        )
-
-        profile_picture_name = None
-
-        if (
-            profile_picture
-            and profile_picture.filename
-        ):
-
-            filename = Path(
-                profile_picture.filename
-            ).name
-
-            profile_picture.save(
-                UPLOAD_FOLDER / filename
+            profile_picture = request.files.get(
+                "profile_picture"
             )
 
-            profile_picture_name = filename
+            profile_picture_name = None
 
-        # ----------------------------------------------------
-        # FORM VALUES
-        # ----------------------------------------------------
-
-        values = {
-
-            "attendance": float(
-                request.form[
-                    "attendance"
-                ]
-            ),
-
-            "cgpa": float(
-                request.form[
-                    "cgpa"
-                ]
-            ),
-
-            "internal_marks": float(
-                request.form[
-                    "internal_marks"
-                ]
-            ),
-
-            "projects": int(
-                request.form[
-                    "projects"
-                ]
-            ),
-
-            "skills_score": float(
-                request.form[
-                    "skills_score"
-                ]
-            ),
-
-            "aptitude_score": float(
-                request.form[
-                    "aptitude_score"
-                ]
-            ),
-
-            "communication_score": float(
-                request.form[
-                    "communication_score"
-                ]
-            )
-        }
-
-        # ----------------------------------------------------
-        # VALIDATION
-        # ----------------------------------------------------
-
-        ranges = [
-
-            (
-                values["attendance"],
-                0,
-                100
-            ),
-
-            (
-                values["cgpa"],
-                0,
-                10
-            ),
-
-            (
-                values["internal_marks"],
-                0,
-                100
-            ),
-
-            (
-                values["projects"],
-                0,
-                20
-            ),
-
-            (
-                values["skills_score"],
-                0,
-                100
-            ),
-
-            (
-                values["aptitude_score"],
-                0,
-                100
-            ),
-
-            (
-                values["communication_score"],
-                0,
-                100
-            )
-        ]
-
-        for value, minimum, maximum in ranges:
-
-            if not (
-                minimum
-                <= value
-                <= maximum
+            if (
+                profile_picture
+                and profile_picture.filename
             ):
 
-                raise ValueError
+                filename = Path(
+                    profile_picture.filename
+                ).name
 
-        # ----------------------------------------------------
-        # AI PREDICTION
-        # ----------------------------------------------------
+                profile_picture.save(
+                    UPLOAD_FOLDER / filename
+                )
 
-        performance, probability, status = (
-            predict_student(values)
-        )
+                profile_picture_name = filename
 
-        # ----------------------------------------------------
-        # DATABASE INSERT
-        # ----------------------------------------------------
+            # ------------------------------------------------
+            # STUDENT VALUES
+            # ------------------------------------------------
 
-        connection = get_database()
+            values = {
 
-        connection.execute(
-            """
-            INSERT INTO students (
+                "attendance": float(
+                    request.form["attendance"]
+                ),
 
-                roll_no,
-                name,
-                department,
-                profile_picture,
-                year,
-                attendance,
-                cgpa,
-                internal_marks,
-                projects,
-                skills_score,
-                aptitude_score,
-                communication_score,
-                performance,
-                placement_probability,
-                placement_status
+                "cgpa": float(
+                    request.form["cgpa"]
+                ),
 
-            )
+                "internal_marks": float(
+                    request.form["internal_marks"]
+                ),
 
-            VALUES (
-                ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?,
-                ?, ?, ?
-            )
-            """,
+                "projects": int(
+                    request.form["projects"]
+                ),
+
+                "skills_score": float(
+                    request.form["skills_score"]
+                ),
+
+                "aptitude_score": float(
+                    request.form["aptitude_score"]
+                ),
+
+                "communication_score": float(
+                    request.form["communication_score"]
+                )
+            }
+
+            # ------------------------------------------------
+            # VALIDATION
+            # ------------------------------------------------
+
+            ranges = [
+
+                (
+                    values["attendance"],
+                    0,
+                    100
+                ),
+
+                (
+                    values["cgpa"],
+                    0,
+                    10
+                ),
+
+                (
+                    values["internal_marks"],
+                    0,
+                    100
+                ),
+
+                (
+                    values["projects"],
+                    0,
+                    20
+                ),
+
+                (
+                    values["skills_score"],
+                    0,
+                    100
+                ),
+
+                (
+                    values["aptitude_score"],
+                    0,
+                    100
+                ),
+
+                (
+                    values["communication_score"],
+                    0,
+                    100
+                )
+            ]
+
+            for (
+                value,
+                minimum,
+                maximum
+            ) in ranges:
+
+                if not (
+                    minimum
+                    <= value
+                    <= maximum
+                ):
+
+                    raise ValueError
+
+            # ------------------------------------------------
+            # AI PREDICTION
+            # ------------------------------------------------
+
             (
-
-                request.form[
-                    "roll_no"
-                ].strip(),
-
-                request.form[
-                    "name"
-                ].strip(),
-
-                request.form[
-                    "department"
-                ].strip(),
-
-                profile_picture_name,
-
-                request.form[
-                    "year"
-                ].strip(),
-
-                values["attendance"],
-
-                values["cgpa"],
-
-                values["internal_marks"],
-
-                values["projects"],
-
-                values["skills_score"],
-
-                values["aptitude_score"],
-
-                values["communication_score"],
-
                 performance,
-
                 probability,
-
                 status
+            ) = predict_student(
+                values
             )
-        )
 
-        connection.commit()
+            # ------------------------------------------------
+            # DATABASE INSERT
+            # ------------------------------------------------
 
-        connection.close()
+            connection = get_database()
 
-        flash(
-            "Student added successfully and AI prediction generated.",
-            "success"
-        )
+            connection.execute(
+                """
+                INSERT INTO students (
 
-        return redirect(
-            url_for("students")
-        )
+                    roll_no,
+                    name,
+                    department,
+                    profile_picture,
+                    year,
 
-    except sqlite3.IntegrityError:
+                    attendance,
+                    cgpa,
+                    internal_marks,
+                    projects,
 
-        if connection:
+                    skills_score,
+                    aptitude_score,
+                    communication_score,
+
+                    performance,
+                    placement_probability,
+                    placement_status
+
+                )
+
+                VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?
+                )
+                """,
+                (
+
+                    request.form[
+                        "roll_no"
+                    ].strip(),
+
+                    request.form[
+                        "name"
+                    ].strip(),
+
+                    request.form[
+                        "department"
+                    ].strip(),
+
+                    profile_picture_name,
+
+                    request.form[
+                        "year"
+                    ].strip(),
+
+                    values[
+                        "attendance"
+                    ],
+
+                    values[
+                        "cgpa"
+                    ],
+
+                    values[
+                        "internal_marks"
+                    ],
+
+                    values[
+                        "projects"
+                    ],
+
+                    values[
+                        "skills_score"
+                    ],
+
+                    values[
+                        "aptitude_score"
+                    ],
+
+                    values[
+                        "communication_score"
+                    ],
+
+                    performance,
+
+                    probability,
+
+                    status
+                )
+            )
+
+            connection.commit()
+
             connection.close()
 
-        flash(
-            "Roll number already exists.",
-            "danger"
-        )
+            flash(
+                "Student added successfully and AI prediction generated.",
+                "success"
+            )
 
-        return redirect(
-            url_for("students")
-        )
+            return redirect(
+                url_for("students")
+            )
 
-    except (
-        KeyError,
-        ValueError
-    ):
+        # ----------------------------------------------------
+        # DUPLICATE ROLL NUMBER
+        # ----------------------------------------------------
 
-        if connection:
-            connection.close()
+        except sqlite3.IntegrityError:
 
-        flash(
-            "Please enter valid values.",
-            "danger"
-        )
+            flash(
+                "Roll number already exists.",
+                "danger"
+            )
 
-        return redirect(
-            url_for("students")
-        )
+        # ----------------------------------------------------
+        # INVALID VALUES
+        # ----------------------------------------------------
 
-    except Exception as error:
+        except (
+            KeyError,
+            ValueError
+        ):
 
-        if connection:
-            connection.close()
+            flash(
+                "Please enter valid values.",
+                "danger"
+            )
 
-        print(
-            "STUDENT ERROR:",
-            error
-        )
+        # ----------------------------------------------------
+        # OTHER ERROR
+        # ----------------------------------------------------
 
-        flash(
-            "Unable to add student. Please check the entered details.",
-            "danger"
-        )
+        except Exception as error:
 
-        return redirect(
-            url_for("students")
-        )
+            print(
+                "STUDENT ERROR:",
+                error
+            )
+
+            flash(
+                "Unable to add student. Please check the entered details.",
+                "danger"
+            )
+
+    # ========================================================
+    # GET - SHOW STUDENTS
+    # ========================================================
+
+    connection = get_database()
+
+    student_list = connection.execute(
+        """
+        SELECT *
+        FROM students
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    connection.close()
+
+    return render_template(
+        "students.html",
+        students=student_list
+    )
 
 
 # ============================================================
-# PROFILE PHOTO
+# UPLOADED PROFILE PICTURES
 # ============================================================
 
 @app.route(
@@ -768,7 +795,7 @@ def uploaded_file(filename):
 
 
 # ============================================================
-# STUDENT DETAILS
+# STUDENT DETAILS / AI PREDICTION
 # ============================================================
 
 @app.route(
@@ -869,14 +896,24 @@ def health():
 
 
 # ============================================================
-# INITIALIZE DATABASE
+# TEST ROUTE
+# ============================================================
+
+@app.route("/test-students")
+def test_students():
+
+    return "STUDENTS ROUTE IS WORKING"
+
+
+# ============================================================
+# DATABASE INITIALIZATION
 # ============================================================
 
 initialize_database()
 
 
 # ============================================================
-# RUN
+# LOCAL DEVELOPMENT
 # ============================================================
 
 if __name__ == "__main__":
@@ -889,5 +926,5 @@ if __name__ == "__main__":
                 5000
             )
         ),
-        debug=False
+        debug=True
     )
