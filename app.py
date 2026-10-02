@@ -311,6 +311,12 @@ def students():
     if request.method == "POST":
 
         try:
+            profile_picture = request.files.get("profile_picture")
+
+if profile_picture and profile_picture.filename:
+    profile_picture.save(
+        UPLOAD_FOLDER / profile_picture.filename
+    )
 
             values = {
 
