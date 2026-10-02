@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ai-student-performance-placement-system
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
