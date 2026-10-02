@@ -521,10 +521,10 @@ def students():
         except (
             KeyError,
             ValueError
-        ):
+        ):as e:
 
             flash(
-                "Please enter valid values.",
+                "Please enter valid values: {e}",
                 "danger"
             )
 
