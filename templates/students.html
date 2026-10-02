@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Students{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>Student Management</h2>
+        <p class="text-muted">
+            Register students and generate AI predictions
+        </p>
+    </div>
+
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+        Dashboard
+    </a>
+</div>
+
+
+<div class="card shadow-sm mb-4">
+
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Student Registration</h5>
+    </div>
+
+    <div class="card-body">
+
+        <form method="POST">
+
+            <div class="row g-3">
+
+                <div class="col-md-4">
+                    <label class="form-label">Roll Number</label>
+                    <input
+                        type="text"
+                        name="roll_no"
+                        class="form-control"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Student Name</label>
+                    <input
+                        type="text"
+                        name="name"
+                        class="form-control"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Department</label>
+                    <select name="department" class="form-select" required>
+                        <option value="">Select Department</option>
+                        <option value="CSE">CSE</option>
+                        <option value="IT">IT</option>
+                        <option value="ECE">ECE</option>
+                        <option value="EEE">EEE</option>
+                        <option value="MECH">MECH</option>
+                        <option value="CIVIL">CIVIL</option>
+                    </select>
+                </div>
+
+
+                <div class="col-md-3">
+                    <label class="form-label">Year</label>
+                    <select name="year" class="form-select" required>
+                        <option value="">Select Year</option>
+                        <option value="I">I</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
+                        <option value="IV">IV</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Attendance (%)</label>
+                    <input
+                        type="number"
+                        name="attendance"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">CGPA</label>
+                    <input
+                        type="number"
+                        name="cgpa"
+                        class="form-control"
+                        min="0"
+                        max="10"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Internal Marks (%)</label>
+                    <input
+                        type="number"
+                        name="internal_marks"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+
+                <div class="col-md-3">
+                    <label class="form-label">Projects</label>
+                    <input
+                        type="number"
+                        name="projects"
+                        class="form-control"
+                        min="0"
+                        max="10"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Technical Skills (%)</label>
+                    <input
+                        type="number"
+                        name="skills_score"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Aptitude Score (%)</label>
+                    <input
+                        type="number"
+                        name="aptitude_score"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Communication (%)</label>
+                    <input
+                        type="number"
+                        name="communication_score"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        required
+                    >
+                </div>
+
+            </div>
+
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-dark">
+                    Register Student & Predict
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<div class="card shadow-sm">
+
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Registered Students</h5>
+    </div>
+
+    <div class="card-body">
+
+        {% if all_students %}
+
+        <div class="table-responsive">
+
+            <table class="table table-bordered table-hover align-middle">
+
+                <thead class="table-light">
+                    <tr>
+                        <th>Roll No</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Year</th>
+                        <th>CGPA</th>
+                        <th>Performance</th>
+                        <th>Placement</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for student in all_students %}
+
+                    <tr>
+
+                        <td>{{ student.roll_no }}</td>
+
+                        <td>{{ student.name }}</td>
+
+                        <td>{{ student.department }}</td>
+
+                        <td>{{ student.year }}</td>
+
+                        <td>{{ student.cgpa }}</td>
+
+                        <td>
+                            {{ student.performance }}
+                        </td>
+
+                        <td>
+                            {{ student.placement_probability }}%
+                        </td>
+
+                        <td>
+
+                            <a
+                                href="{{ url_for('student_detail', student_id=student.id) }}"
+                                class="btn btn-sm btn-primary">
+                                View
+                            </a>
+
+                            <form
+                                method="POST"
+                                action="{{ url_for('delete_student', student_id=student.id) }}"
+                                class="d-inline">
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm btn-danger"
+                                    onclick="return confirm('Delete this student?');">
+                                    Delete
+                                </button>
+
+                            </form>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <p class="text-muted text-center mb-0">
+            No students registered yet.
+        </p>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+{% endblock %}
