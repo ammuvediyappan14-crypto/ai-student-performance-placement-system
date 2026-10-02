@@ -209,6 +209,7 @@
                     <tr>
                         <th>Roll No</th>
                         <th>Name</th>
+                        <th>Profile</th>
                         <th>Department</th>
                         <th>Year</th>
                         <th>CGPA</th>
@@ -227,6 +228,19 @@
                         <td>{{ student.roll_no }}</td>
 
                         <td>{{ student.name }}</td>
+                        <td>
+    {% if student.profile_picture %}
+        <img
+            src="{{ url_for('uploaded_file', filename=student.profile_picture) }}"
+            width="50"
+            height="50"
+            class="rounded-circle"
+            style="object-fit: cover;"
+        >
+    {% else %}
+        No Photo
+    {% endif %}
+</td>
 
                         <td>{{ student.department }}</td>
 
