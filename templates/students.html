@@ -26,7 +26,7 @@
 
     <div class="card-body">
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
 
             <div class="row g-3">
 
@@ -62,6 +62,16 @@
                         <option value="B.COM">B.COM</option>
                     </select>
                 </div>
+                <div class="col-md-4">
+    <label class="form-label">Profile Picture</label>
+    <input
+        type="file"
+        name="profile_picture"
+        class="form-control"
+        accept="image/*"
+        required
+    >
+</div>
 
 
                 <div class="col-md-3">
