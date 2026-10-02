@@ -423,9 +423,9 @@ def students():
             f"Value must be between {minimum} and {maximum}."
         )
 
-            performance, probability, status = (
-                predict_student(values)
-            )
+ performance, probability, status = (
+     predict_student(values)
+       )
 
             connection = get_database()
 
@@ -512,16 +512,14 @@ def students():
                 "Roll number already exists.",
                 "danger"
             )
-
-        except (
-            KeyError,
-            ValueError
-        ):as e:
-
-            flash(
-                "Please enter valid values: {e}",
-                "danger"
-            )
+  except (
+      KeyError,
+      ValueError
+  ):as e:
+      flash(
+         "Please enter valid values: {e}",
+         "danger"
+  )
 
     connection = get_database()
 
