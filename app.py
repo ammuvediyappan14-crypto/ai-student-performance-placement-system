@@ -313,10 +313,10 @@ def students():
         try:
             profile_picture = request.files.get("profile_picture")
 
-if profile_picture and profile_picture.filename:
-    profile_picture.save(
-        UPLOAD_FOLDER / profile_picture.filename
-    )
+            if profile_picture and profile_picture.filename:
+            profile_picture.save(
+                UPLOAD_FOLDER / profile_picture.filename
+            )
 
             values = {
 
@@ -437,6 +437,7 @@ if profile_picture and profile_picture.filename:
                     roll_no,
                     name,
                     department,
+                    profile_picture,
                     year,
                     attendance,
                     cgpa,
@@ -450,7 +451,7 @@ if profile_picture and profile_picture.filename:
                     placement_status
                 )
                 VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?
                 )
                 """,
@@ -466,6 +467,7 @@ if profile_picture and profile_picture.filename:
                     request.form[
                         "department"
                     ].strip(),
+                    profile_picture.filename if profile_picture else None,
 
                     request.form[
                         "year"
