@@ -270,7 +270,7 @@ def dashboard():
         SELECT *
         FROM students
         ORDER BY id DESC
-        LIMIT 5
+        LIMIT 50
         """
     ).fetchall()
 
