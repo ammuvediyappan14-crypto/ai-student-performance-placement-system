@@ -27,7 +27,9 @@ PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 
-app = Flask(__name__)
+app = Flask(__name__) 
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
