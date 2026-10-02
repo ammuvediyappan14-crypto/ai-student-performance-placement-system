@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Student Prediction Report{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>Student Prediction Report</h2>
+        <p class="text-muted mb-0">
+            AI-based academic performance and placement analysis
+        </p>
+    </div>
+
+    <a href="{{ url_for('students') }}" class="btn btn-secondary">
+        Back to Students
+    </a>
+</div>
+
+
+<div class="card shadow-sm mb-4">
+
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Student Details</h5>
+    </div>
+
+    <div class="card-body">
+
+        <div class="row g-3">
+
+            <div class="col-md-4">
+                <strong>Roll Number</strong>
+                <p>{{ student.roll_no }}</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Name</strong>
+                <p>{{ student.name }}</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Department</strong>
+                <p>{{ student.department }}</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Year</strong>
+                <p>{{ student.year }}</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Attendance</strong>
+                <p>{{ student.attendance }}%</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>CGPA</strong>
+                <p>{{ student.cgpa }}</p>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="row g-4">
+
+    <div class="col-md-6">
+
+        <div class="card result-box shadow-sm">
+
+            <div class="card-body text-center">
+
+                <h5>Academic Performance</h5>
+
+                <h2 class="mt-3">
+                    {{ student.performance }}
+                </h2>
+
+                <p class="text-muted">
+                    AI predicted academic performance level
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="col-md-6">
+
+        <div class="card result-box shadow-sm">
+
+            <div class="card-body text-center">
+
+                <h5>Placement Probability</h5>
+
+                <h2 class="mt-3">
+                    {{ student.placement_probability }}%
+                </h2>
+
+                <p class="mt-2">
+                    <strong>{{ student.placement_status }}</strong>
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="card shadow-sm mt-4">
+
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Academic Input Scores</h5>
+    </div>
+
+    <div class="card-body">
+
+        <div class="row g-3">
+
+            <div class="col-md-4">
+                <strong>Internal Marks</strong>
+                <p>{{ student.internal_marks }}%</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Projects</strong>
+                <p>{{ student.projects }}</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Technical Skills</strong>
+                <p>{{ student.skills_score }}%</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Aptitude</strong>
+                <p>{{ student.aptitude_score }}%</p>
+            </div>
+
+            <div class="col-md-4">
+                <strong>Communication</strong>
+                <p>{{ student.communication_score }}%</p>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
