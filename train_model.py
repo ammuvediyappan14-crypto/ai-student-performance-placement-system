@@ -1,148 +1,199 @@
-from pathlib import Path
 import pickle
+from pathlib import Path
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
+
+# ============================================================
+# PATHS
+# ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
+
 MODEL_DIR = BASE_DIR / "models"
 
 PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
+
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 
-def create_dataset(number_of_students=1200, seed=42):
-    rng = np.random.default_rng(seed)
+# ============================================================
+# FEATURES
+# ============================================================
 
-    attendance = rng.uniform(45, 100, number_of_students)
-    cgpa = rng.uniform(4.5, 10, number_of_students)
-    internal_marks = rng.uniform(40, 100, number_of_students)
-    projects = rng.integers(0, 6, number_of_students)
-    skills_score = rng.uniform(35, 100, number_of_students)
-    aptitude_score = rng.uniform(30, 100, number_of_students)
-    communication_score = rng.uniform(35, 100, number_of_students)
+FEATURES = [
+    "attendance",
+    "cgpa",
+    "internal_marks",
+    "projects",
+    "skills_score",
+    "aptitude_score",
+    "communication_score"
+]
 
-    performance_score = (
-        attendance * 0.18
-        + cgpa * 8 * 0.25
-        + internal_marks * 0.15
-        + projects * 4 * 0.10
-        + skills_score * 0.12
-        + aptitude_score * 0.10
-        + communication_score * 0.10
-    )
 
-    performance_label = np.where(
-        performance_score >= 75,
-        "Excellent",
-        np.where(
-            performance_score >= 60,
-            "Good",
-            np.where(
-                performance_score >= 48,
-                "Average",
-                "Needs Improvement"
-            )
-        )
-    )
-
-    placement_score = (
-        attendance * 0.10
-        + cgpa * 10 * 0.20
-        + internal_marks * 0.10
-        + projects * 20 * 0.10
-        + skills_score * 0.20
-        + aptitude_score * 0.15
-        + communication_score * 0.15
-    )
-
-    placement_label = (placement_score >= 68).astype(int)
-
-    features = np.column_stack(
-        [
-            attendance,
-            cgpa,
-            internal_marks,
-            projects,
-            skills_score,
-            aptitude_score,
-            communication_score,
-        ]
-    )
-
-    return features, performance_label, placement_label
-
+# ============================================================
+# TRAIN MODELS
+# ============================================================
 
 def train_models():
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    X, performance_y, placement_y = create_dataset()
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        performance_y,
-        test_size=0.20,
-        random_state=42,
-        stratify=performance_y,
+    MODEL_DIR.mkdir(
+        parents=True,
+        exist_ok=True
     )
+
+    # --------------------------------------------------------
+    # SAMPLE TRAINING DATA
+    # --------------------------------------------------------
+
+    X = np.array([
+        [95, 9.2, 92, 5, 90, 88, 92],
+        [90, 8.8, 86, 4, 85, 84, 88],
+        [85, 8.2, 80, 4, 80, 78, 82],
+        [80, 7.8, 75, 3, 75, 72, 78],
+        [75, 7.2, 70, 3, 68, 65, 70],
+        [70, 6.8, 65, 2, 62, 60, 65],
+        [65, 6.2, 60, 2, 55, 52, 58],
+        [60, 5.8, 55, 1, 50, 48, 52],
+        [55, 5.2, 50, 1, 45, 42, 48],
+        [50, 4.8, 45, 0, 40, 38, 42],
+        [92, 9.0, 90, 5, 88, 90, 91],
+        [88, 8.5, 84, 4, 82, 80, 85],
+        [82, 7.9, 78, 3, 76, 74, 79],
+        [78, 7.5, 73, 3, 70, 68, 73],
+        [72, 7.0, 68, 2, 64, 62, 68],
+        [68, 6.5, 63, 2, 58, 56, 62],
+        [62, 6.0, 58, 1, 52, 50, 55],
+        [58, 5.5, 52, 1, 48, 45, 50],
+        [52, 5.0, 48, 0, 42, 40, 45],
+        [48, 4.5, 42, 0, 35, 34, 40]
+    ], dtype=float)
+
+    # --------------------------------------------------------
+    # PERFORMANCE TARGET
+    # --------------------------------------------------------
+
+    performance_target = np.array([
+        "Excellent",
+        "Excellent",
+        "Very Good",
+        "Very Good",
+        "Good",
+        "Good",
+        "Average",
+        "Average",
+        "Needs Improvement",
+        "Needs Improvement",
+        "Excellent",
+        "Very Good",
+        "Very Good",
+        "Good",
+        "Good",
+        "Average",
+        "Average",
+        "Needs Improvement",
+        "Needs Improvement",
+        "Needs Improvement"
+    ])
+
+    # --------------------------------------------------------
+    # PLACEMENT TARGET
+    # --------------------------------------------------------
+
+    placement_target = np.array([
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+    ])
+
+    # --------------------------------------------------------
+    # PERFORMANCE MODEL
+    # --------------------------------------------------------
 
     performance_model = RandomForestClassifier(
-        n_estimators=180,
-        random_state=42,
-        class_weight="balanced",
+        n_estimators=100,
+        random_state=42
     )
 
-    performance_model.fit(X_train, y_train)
-
-    performance_prediction = performance_model.predict(X_test)
-
-    performance_accuracy = accuracy_score(
-        y_test,
-        performance_prediction
-    )
-
-    X_train_p, X_test_p, y_train_p, y_test_p = train_test_split(
+    performance_model.fit(
         X,
-        placement_y,
-        test_size=0.20,
-        random_state=42,
-        stratify=placement_y,
+        performance_target
     )
+
+    # --------------------------------------------------------
+    # PLACEMENT MODEL
+    # --------------------------------------------------------
 
     placement_model = RandomForestClassifier(
-        n_estimators=180,
-        random_state=42,
-        class_weight="balanced",
+        n_estimators=100,
+        random_state=42
     )
 
-    placement_model.fit(X_train_p, y_train_p)
-
-    placement_prediction = placement_model.predict(X_test_p)
-
-    placement_accuracy = accuracy_score(
-        y_test_p,
-        placement_prediction
+    placement_model.fit(
+        X,
+        placement_target
     )
 
-    with open(PERFORMANCE_MODEL, "wb") as file:
-        pickle.dump(performance_model, file)
+    # --------------------------------------------------------
+    # SAVE MODELS
+    # --------------------------------------------------------
 
-    with open(PLACEMENT_MODEL, "wb") as file:
-        pickle.dump(placement_model, file)
+    with open(
+        PERFORMANCE_MODEL,
+        "wb"
+    ) as file:
+
+        pickle.dump(
+            performance_model,
+            file
+        )
+
+    with open(
+        PLACEMENT_MODEL,
+        "wb"
+    ) as file:
+
+        pickle.dump(
+            placement_model,
+            file
+        )
 
     print(
-        f"Performance model accuracy: "
-        f"{performance_accuracy * 100:.2f}%"
+        "AI models trained successfully."
     )
 
     print(
-        f"Placement model accuracy: "
-        f"{placement_accuracy * 100:.2f}%"
+        f"Performance model: {PERFORMANCE_MODEL}"
     )
 
+    print(
+        f"Placement model: {PLACEMENT_MODEL}"
+    )
+
+
+# ============================================================
+# RUN TRAINING
+# ============================================================
 
 if __name__ == "__main__":
+
     train_models()
