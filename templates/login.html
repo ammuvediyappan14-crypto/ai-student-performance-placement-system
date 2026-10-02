@@ -9,10 +9,19 @@
 
         <div class="card shadow">
             <div class="card-body p-4">
+                <div class="text-center mb-3">
+                    <img
+                       src="{{ url_for('static', filename='logo/logo.png') }}"
+                       alt="Logo"
+                       width="80"
+                       height="80"
+                       style="object-fit: contain;"
+             >
+        </div>
 
-                <h3 class="text-center mb-4">
+        <h3 class="text-center mb-4">
                     Admin Login
-                </h3>
+        </h3>
 
                 <form method="POST">
 
