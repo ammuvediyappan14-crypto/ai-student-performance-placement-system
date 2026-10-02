@@ -417,16 +417,11 @@ def students():
                     100
                 )
             ]
-
-            for value, minimum, maximum in ranges:
-
-                if not (
-                    minimum
-                    <= value
-                    <= maximum
-                ):
-
-                    raise ValueError
+ for value, minimum, maximum in ranges:
+     if not (minimum <= value <= maximum):
+        raise ValueError(
+            f"Value must be between {minimum} and {maximum}."
+        )
 
             performance, probability, status = (
                 predict_student(values)
