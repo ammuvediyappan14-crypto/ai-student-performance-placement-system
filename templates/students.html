@@ -1,305 +1,601 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
 
-{% block title %}Students{% endblock %}
+<head>
 
-{% block content %}
+    <meta charset="UTF-8">
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2>Student Management</h2>
-        <p class="text-muted">
-            Register students and generate AI predictions
-        </p>
-    </div>
-
-    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
-        Dashboard
-    </a>
-</div>
-
-
-<div class="card shadow-sm mb-4">
-
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">Student Registration</h5>
-    </div>
-
-    <div class="card-body">
-
-        <form method="POST" enctype="multipart/form-data">
-
-            <div class="row g-3">
-
-                <div class="col-md-4">
-                    <label class="form-label">Roll Number</label>
-                    <input
-                        type="text"
-                        name="roll_no"
-                        class="form-control"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Student Name</label>
-                    <input
-                        type="text"
-                        name="name"
-                        class="form-control"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Department</label>
-                    <select name="department" class="form-select" required>
-                        <option value="">Select Department</option>
-                        <option value="CS">CS</option>
-                        <option value="IT">IT</option>
-                        <option value="AI">AI</option>
-                        <option value="BCA">BCA</option>
-                        <option value="BBA">BBA</option>
-                        <option value="B.COM">B.COM</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-    <label class="form-label">Profile Picture</label>
-    <input
-        type="file"
-        name="profile_picture"
-        class="form-control"
-        accept="image/*"
-        required
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
     >
-</div>
+
+    <title>
+        Dashboard - AI Student System
+    </title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+
+            font-family: Arial, sans-serif;
+
+            background: #f4f6f9;
+
+            color: #333;
+        }
 
 
-                <div class="col-md-3">
-                    <label class="form-label">Year</label>
-                    <select name="year" class="form-select" required>
-                        <option value="">Select Year</option>
-                        <option value="I">I</option>
-                        <option value="II">II</option>
-                        <option value="III">III</option>
-                    </select>
-                </div>
+        /* NAVBAR */
 
-                <div class="col-md-3">
-                    <label class="form-label">Attendance (%)</label>
-                    <input
-                        type="number"
-                        name="attendance"
-                        class="form-control"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        required
-                    >
-                </div>
+        .navbar {
+            background: #667eea;
 
-                <div class="col-md-3">
-                    <label class="form-label">CGPA</label>
-                    <input
-                        type="number"
-                        name="cgpa"
-                        class="form-control"
-                        min="0"
-                        max="10"
-                        step="0.01"
-                        required
-                    >
-                </div>
+            color: white;
 
-                <div class="col-md-3">
-                    <label class="form-label">Internal Marks (%)</label>
-                    <input
-                        type="number"
-                        name="internal_marks"
-                        class="form-control"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        required
-                    >
-                </div>
+            padding: 15px 25px;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            flex-wrap: wrap;
+        }
+
+        .navbar h2 {
+            margin: 0;
+        }
+
+        .navbar-links {
+            display: flex;
+
+            gap: 20px;
+        }
+
+        .navbar a {
+            color: white;
+
+            text-decoration: none;
+
+            font-weight: bold;
+        }
+
+        .navbar a:hover {
+            text-decoration: underline;
+        }
 
 
-                <div class="col-md-3">
-                    <label class="form-label">Projects</label>
-                    <input
-                        type="number"
-                        name="projects"
-                        class="form-control"
-                        min="0"
-                        max="10"
-                        required
-                    >
-                </div>
+        /* MAIN CONTAINER */
 
-                <div class="col-md-3">
-                    <label class="form-label">Technical Skills (%)</label>
-                    <input
-                        type="number"
-                        name="skills_score"
-                        class="form-control"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        required
-                    >
-                </div>
+        .container {
+            width: 95%;
 
-                <div class="col-md-3">
-                    <label class="form-label">Aptitude Score (%)</label>
-                    <input
-                        type="number"
-                        name="aptitude_score"
-                        class="form-control"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        required
-                    >
-                </div>
+            max-width: 1200px;
 
-                <div class="col-md-3">
-                    <label class="form-label">Communication (%)</label>
-                    <input
-                        type="number"
-                        name="communication_score"
-                        class="form-control"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        required
-                    >
-                </div>
-
-            </div>
+            margin: 30px auto;
+        }
 
 
-            <div class="mt-4">
-                <button type="submit" class="btn btn-dark">
-                    Register Student & Predict
-                </button>
-            </div>
+        /* WELCOME */
 
-        </form>
+        .welcome {
+            margin-bottom: 25px;
+        }
 
-    </div>
+        .welcome h1 {
+            margin: 0 0 8px;
 
-</div>
+            color: #333;
+        }
+
+        .welcome p {
+            margin: 0;
+
+            color: #777;
+        }
 
 
-<div class="card shadow-sm">
+        /* STAT CARDS */
 
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">Registered Students</h5>
-    </div>
+        .stats {
+            display: grid;
 
-    <div class="card-body">
+            grid-template-columns:
+                repeat(4, 1fr);
 
-        {% if students %}
+            gap: 20px;
 
-        <div class="table-responsive">
+            margin-bottom: 30px;
+        }
 
-            <table class="table table-bordered table-hover align-middle">
+        .stat-card {
+            background: white;
 
-                <thead class="table-light">
-                    <tr>
-                        <th>Roll No</th>
-                        <th>Name</th>
-                        <th>Profile</th>
-                        <th>Department</th>
-                        <th>Year</th>
-                        <th>CGPA</th>
-                        <th>Performance</th>
-                        <th>Placement</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
+            padding: 25px;
 
-                <tbody>
+            border-radius: 12px;
 
-                    {% for student in students %}
+            box-shadow:
+                0 4px 15px
+                rgba(0, 0, 0, 0.08);
 
-                    <tr>
+            text-align: center;
+        }
 
-                        <td>{{ student.roll_no }}</td>
+        .stat-card h3 {
+            margin: 0 0 10px;
 
-                        <td>{{ student.name }}</td>
-                        <td>
-    {% if student.profile_picture %}
-        <img
-            src="{{ url_for('uploaded_file', filename=student.profile_picture) }}"
-            width="50"
-            height="50"
-            class="rounded-circle"
-            style="object-fit: cover;"
-        >
-    {% else %}
-        No Photo
-    {% endif %}
-</td>
+            color: #777;
 
-                        <td>{{ student.department }}</td>
+            font-size: 15px;
+        }
 
-                        <td>{{ student.year }}</td>
+        .stat-value {
+            font-size: 30px;
 
-                        <td>{{ student.cgpa }}</td>
+            font-weight: bold;
 
-                        <td>
-                            {{ student.performance }}
-                        </td>
+            color: #667eea;
+        }
 
-                        <td>
-                            {{ student.placement_probability }}%
-                        </td>
 
-                        <td>
+        /* ACTION BUTTONS */
 
-                            <a
-                                href="{{ url_for('student_detail', student_id=student.id) }}"
-                                class="btn btn-sm btn-primary">
-                                View
-                            </a>
+        .actions {
+            display: flex;
 
-                            <form
-                                method="POST"
-                                action="{{ url_for('delete_student', student_id=student.id) }}"
-                                class="d-inline">
+            gap: 15px;
 
-                                <button
-                                    type="submit"
-                                    class="btn btn-sm btn-danger"
-                                    onclick="return confirm('Delete this student?');">
-                                    Delete
-                                </button>
+            margin-bottom: 30px;
 
-                            </form>
+            flex-wrap: wrap;
+        }
 
-                        </td>
+        .action-btn {
+            display: inline-block;
 
-                    </tr>
+            padding: 12px 20px;
 
-                    {% endfor %}
+            background: #667eea;
 
-                </tbody>
+            color: white;
 
-            </table>
+            text-decoration: none;
+
+            border-radius: 8px;
+
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background: #5568d9;
+        }
+
+
+        /* RECENT STUDENTS */
+
+        .card {
+            background: white;
+
+            padding: 25px;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 4px 15px
+                rgba(0, 0, 0, 0.08);
+        }
+
+        .card h2 {
+            margin-top: 0;
+
+            margin-bottom: 20px;
+        }
+
+
+        /* TABLE */
+
+        .table-container {
+            width: 100%;
+
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+
+            border-collapse: collapse;
+
+            min-width: 700px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+
+            border-bottom: 1px solid #ddd;
+
+            text-align: left;
+        }
+
+        th {
+            background: #667eea;
+
+            color: white;
+        }
+
+        tr:hover {
+            background: #f7f7f7;
+        }
+
+
+        /* PHOTO */
+
+        .student-photo {
+            width: 45px;
+
+            height: 45px;
+
+            border-radius: 50%;
+
+            object-fit: cover;
+
+            border: 2px solid #ddd;
+        }
+
+
+        /* VIEW BUTTON */
+
+        .view-btn {
+            display: inline-block;
+
+            padding: 7px 12px;
+
+            background: #667eea;
+
+            color: white;
+
+            text-decoration: none;
+
+            border-radius: 6px;
+
+            font-size: 13px;
+        }
+
+
+        /* EMPTY */
+
+        .empty {
+            padding: 25px;
+
+            text-align: center;
+
+            color: #777;
+        }
+
+
+        /* RESPONSIVE */
+
+        @media (max-width: 900px) {
+
+            .stats {
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+        }
+
+
+        @media (max-width: 600px) {
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .navbar {
+                gap: 15px;
+            }
+
+            .navbar-links {
+                gap: 12px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- NAVBAR -->
+
+    <div class="navbar">
+
+        <h2>
+            AI Student System
+        </h2>
+
+        <div class="navbar-links">
+
+            <a href="{{ url_for('dashboard') }}">
+                Dashboard
+            </a>
+
+            <a href="{{ url_for('students') }}">
+                Students
+            </a>
+
+            <a href="{{ url_for('logout') }}">
+                Logout
+            </a>
 
         </div>
 
-        {% else %}
+    </div>
 
-        <p class="text-muted text-center mb-0">
-            No students registered yet.
-        </p>
 
-        {% endif %}
+    <!-- MAIN -->
+
+    <div class="container">
+
+
+        <!-- WELCOME -->
+
+        <div class="welcome">
+
+            <h1>
+                Admin Dashboard
+            </h1>
+
+            <p>
+                AI Student Performance & Placement System
+            </p>
+
+        </div>
+
+
+        <!-- STATISTICS -->
+
+        <div class="stats">
+
+
+            <div class="stat-card">
+
+                <h3>
+                    Total Students
+                </h3>
+
+                <div class="stat-value">
+                    {{ total }}
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>
+                    Likely to be Placed
+                </h3>
+
+                <div class="stat-value">
+                    {{ placed }}
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>
+                    Average CGPA
+                </h3>
+
+                <div class="stat-value">
+                    {{ avg_cgpa }}
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>
+                    Average Placement Probability
+                </h3>
+
+                <div class="stat-value">
+                    {{ avg_probability }}%
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ACTIONS -->
+
+        <div class="actions">
+
+            <a
+                href="{{ url_for('students') }}"
+                class="action-btn"
+            >
+                + Add Student
+            </a>
+
+            <a
+                href="{{ url_for('students') }}"
+                class="action-btn"
+            >
+                View All Students
+            </a>
+
+        </div>
+
+
+        <!-- RECENT STUDENTS -->
+
+        <div class="card">
+
+            <h2>
+                Recent Students
+            </h2>
+
+
+            {% if recent %}
+
+                <div class="table-container">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Photo
+                                </th>
+
+                                <th>
+                                    Roll No
+                                </th>
+
+                                <th>
+                                    Name
+                                </th>
+
+                                <th>
+                                    Department
+                                </th>
+
+                                <th>
+                                    Year
+                                </th>
+
+                                <th>
+                                    CGPA
+                                </th>
+
+                                <th>
+                                    Placement
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for student in recent %}
+
+                                <tr>
+
+                                    <td>
+
+                                        {% if student.profile_picture %}
+
+                                            <img
+                                                src="{{ url_for(
+                                                    'uploaded_file',
+                                                    filename=student.profile_picture
+                                                ) }}"
+                                                alt="Student Photo"
+                                                class="student-photo"
+                                            >
+
+                                        {% else %}
+
+                                            No Photo
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.roll_no }}
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.name }}
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.department }}
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.year }}
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.cgpa }}
+                                    </td>
+
+
+                                    <td>
+                                        {{ student.placement_probability }}%
+                                    </td>
+
+
+                                    <td>
+
+                                        <a
+                                            href="{{ url_for(
+                                                'student_detail',
+                                                student_id=student.id
+                                            ) }}"
+                                            class="view-btn"
+                                        >
+                                            View
+                                        </a>
+
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            {% else %}
+
+                <div class="empty">
+
+                    No students registered yet.
+
+                </div>
+
+            {% endif %}
+
+        </div>
 
     </div>
 
-</div>
+</body>
 
-{% endblock %}
+</html>
