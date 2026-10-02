@@ -71,6 +71,8 @@ def initialize_database():
             name TEXT NOT NULL,
 
             department TEXT NOT NULL,
+            
+            profile_picture TEXT,
 
             year TEXT NOT NULL,
 
