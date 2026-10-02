@@ -5,7 +5,8 @@ from flask import (
     redirect,
     url_for,
     session,
-    flash
+    flash,
+    send_from_directory
 )
 
 import os
@@ -314,9 +315,9 @@ def students():
             profile_picture = request.files.get("profile_picture")
 
             if profile_picture and profile_picture.filename:
-            profile_picture.save(
-                UPLOAD_FOLDER / profile_picture.filename
-            )
+                profile_picture.save(
+                    UPLOAD_FOLDER / profile_picture.filename
+                )
 
             values = {
 
@@ -540,6 +541,12 @@ def students():
     return render_template(
         "students.html",
         students=student_list
+    )
+    @app.route("/uploads/<filename>")
+    def uploaded_file(filename):
+    return send_from_directory(
+        UPLOAD_FOLDER,
+        filename
     )
 
 
