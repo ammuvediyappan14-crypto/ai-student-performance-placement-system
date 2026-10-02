@@ -12,9 +12,9 @@
         </p>
     </div>
 
-    <a href="{{ url_for('students') }}" class="btn btn-dark">
-        + Add Student
-    </a>
+    <a href="/students" class="btn btn-dark">
+    + Add Student
+</a>
 </div>
 
 
@@ -124,11 +124,11 @@
                 No students registered yet.
             </p>
 
-            <a
-                href="{{ url_for('students') }}"
-                class="btn btn-dark">
-                Add First Student
-            </a>
+           <a
+             href="/students"
+             class="btn btn-dark">
+             Add First Student
+           </a>
         </div>
 
         {% endif %}
