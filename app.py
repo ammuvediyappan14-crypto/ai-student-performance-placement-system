@@ -408,6 +408,10 @@ def dashboard():
 # STUDENTS
 # ============================================================
 
+@app.route("/test-students")
+def test_students():
+    return "STUDENTS ROUTE IS WORKING"
+    
 @app.route(
     "/students",
     methods=["GET", "POST"]
