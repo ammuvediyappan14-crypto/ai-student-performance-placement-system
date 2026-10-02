@@ -32,6 +32,8 @@ app = Flask(__name__)
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
 app.secret_key = os.environ.get(
     "SECRET_KEY",
     "development-secret-key"
