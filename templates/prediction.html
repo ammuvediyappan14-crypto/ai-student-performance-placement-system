@@ -1,653 +1,269 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
+{% block title %}
+Student AI Prediction - AI Student System
+{% endblock %}
 
-    <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+{% block content %}
 
-    <title>
-        Student Prediction - AI Student System
-    </title>
+<div class="d-flex justify-content-between align-items-center mb-4">
 
-    <style>
+    <div>
 
-        * {
-            box-sizing: border-box;
-        }
+        <h1 class="fw-bold">
+            Student Details & AI Prediction
+        </h1>
 
-        body {
-            margin: 0;
-
-            font-family: Arial, sans-serif;
-
-            background: #f4f6f9;
-
-            color: #333;
-        }
-
-        /* NAVBAR */
-
-        .navbar {
-            background: #667eea;
-
-            color: white;
-
-            padding: 15px 25px;
-
-            display: flex;
-
-            justify-content: space-between;
-
-            align-items: center;
-
-            flex-wrap: wrap;
-        }
-
-        .navbar h2 {
-            margin: 0;
-        }
-
-        .navbar-links {
-            display: flex;
-
-            gap: 20px;
-        }
-
-        .navbar a {
-            color: white;
-
-            text-decoration: none;
-
-            font-weight: bold;
-        }
-
-        .navbar a:hover {
-            text-decoration: underline;
-        }
-
-        /* CONTAINER */
-
-        .container {
-            width: 95%;
-
-            max-width: 1000px;
-
-            margin: 30px auto;
-        }
-
-        /* MAIN CARD */
-
-        .card {
-            background: white;
-
-            padding: 30px;
-
-            border-radius: 15px;
-
-            box-shadow:
-                0 4px 15px
-                rgba(0, 0, 0, 0.08);
-
-            margin-bottom: 25px;
-        }
-
-        .student-header {
-            display: flex;
-
-            align-items: center;
-
-            gap: 25px;
-
-            margin-bottom: 30px;
-        }
-
-        /* PROFILE PHOTO */
-
-        .profile-photo {
-            width: 130px;
-
-            height: 130px;
-
-            border-radius: 50%;
-
-            object-fit: cover;
-
-            border: 4px solid #667eea;
-        }
-
-        .no-photo {
-            width: 130px;
-
-            height: 130px;
-
-            border-radius: 50%;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            background: #e9ecef;
-
-            color: #777;
-
-            border: 4px solid #ddd;
-
-            text-align: center;
-
-            font-size: 14px;
-        }
-
-        .student-name {
-            margin: 0 0 8px;
-
-            font-size: 28px;
-
-            color: #333;
-        }
-
-        .student-roll {
-            margin: 0;
-
-            color: #777;
-
-            font-size: 16px;
-        }
-
-        /* SECTION TITLE */
-
-        .section-title {
-            margin-top: 25px;
-
-            margin-bottom: 18px;
-
-            color: #667eea;
-
-            border-bottom: 2px solid #eee;
-
-            padding-bottom: 10px;
-        }
-
-        /* DETAILS GRID */
-
-        .details-grid {
-            display: grid;
-
-            grid-template-columns:
-                repeat(2, 1fr);
-
-            gap: 15px;
-        }
-
-        .detail-box {
-            padding: 15px;
-
-            background: #f8f9fa;
-
-            border-radius: 8px;
-
-            border: 1px solid #eee;
-        }
-
-        .detail-label {
-            display: block;
-
-            font-size: 13px;
-
-            color: #777;
-
-            margin-bottom: 5px;
-        }
-
-        .detail-value {
-            font-size: 17px;
-
-            font-weight: bold;
-
-            color: #333;
-        }
-
-        /* PREDICTION CARDS */
-
-        .prediction-grid {
-            display: grid;
-
-            grid-template-columns:
-                repeat(3, 1fr);
-
-            gap: 20px;
-
-            margin-top: 20px;
-        }
-
-        .prediction-card {
-            padding: 25px;
-
-            border-radius: 12px;
-
-            text-align: center;
-
-            background: #f8f9fa;
-
-            border: 1px solid #eee;
-        }
-
-        .prediction-card h3 {
-            margin: 0 0 12px;
-
-            font-size: 15px;
-
-            color: #777;
-        }
-
-        .prediction-value {
-            font-size: 24px;
-
-            font-weight: bold;
-
-            color: #667eea;
-        }
-
-        /* PROBABILITY */
-
-        .probability {
-            font-size: 32px;
-
-            font-weight: bold;
-
-            color: #667eea;
-        }
-
-        /* STATUS */
-
-        .status {
-            display: inline-block;
-
-            padding: 8px 15px;
-
-            border-radius: 20px;
-
-            background: #667eea;
-
-            color: white;
-
-            font-weight: bold;
-
-            font-size: 14px;
-        }
-
-        /* BUTTON */
-
-        .back-btn {
-            display: inline-block;
-
-            padding: 12px 20px;
-
-            background: #667eea;
-
-            color: white;
-
-            text-decoration: none;
-
-            border-radius: 8px;
-
-            font-weight: bold;
-
-            margin-top: 25px;
-        }
-
-        .back-btn:hover {
-            background: #5568d9;
-        }
-
-        /* RESPONSIVE */
-
-        @media (max-width: 700px) {
-
-            .student-header {
-                flex-direction: column;
-
-                text-align: center;
-            }
-
-            .details-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .prediction-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .navbar {
-                gap: 15px;
-            }
-
-            .navbar-links {
-                gap: 12px;
-            }
-
-        }
-
-    </style>
-
-</head>
-
-
-<body>
-
-
-    <!-- NAVBAR -->
-
-    <div class="navbar">
-
-        <h2>
-            AI Student System
-        </h2>
-
-        <div class="navbar-links">
-
-            <a href="{{ url_for('dashboard') }}">
-                Dashboard
-            </a>
-
-            <a href="{{ url_for('students') }}">
-                Students
-            </a>
-
-            <a href="{{ url_for('logout') }}">
-                Logout
-            </a>
-
-        </div>
+        <p class="text-muted">
+            AI-based performance and placement analysis
+        </p>
 
     </div>
 
 
-    <!-- MAIN -->
+    <a
+        href="{{ url_for('students') }}"
+        class="btn btn-outline-primary"
+    >
+        ← Students
+    </a>
 
-    <div class="container">
-
-
-        <div class="card">
-
-
-            <!-- STUDENT HEADER -->
-
-            <div class="student-header">
+</div>
 
 
-                {% if student.profile_picture %}
+<!-- ========================================================
+     STUDENT PROFILE
+========================================================= -->
 
-                    <img
-                        src="{{ url_for(
-                            'uploaded_file',
-                            filename=student.profile_picture
-                        ) }}"
-                        alt="Student Photo"
-                        class="profile-photo"
-                    >
+<div class="card shadow-sm border-0 mb-4">
+
+    <div class="card-body">
+
+        <div class="row align-items-center">
+
+
+            <div class="col-md-3 text-center">
+
+                {% if student["profile_picture"] %}
+
+                <img
+                    src="{{ url_for(
+                        'uploaded_file',
+                        filename=student['profile_picture']
+                    ) }}"
+                    class="rounded-circle shadow"
+                    width="150"
+                    height="150"
+                    style="object-fit: cover;"
+                >
 
                 {% else %}
 
-                    <div class="no-photo">
+                <div
+                    class="rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto"
+                    style="width:150px;height:150px;"
+                >
+
+                    <span class="text-muted">
                         No Photo
-                    </div>
+                    </span>
+
+                </div>
 
                 {% endif %}
 
-
-                <div>
-
-                    <h1 class="student-name">
-                        {{ student.name }}
-                    </h1>
-
-                    <p class="student-roll">
-                        Roll Number:
-                        {{ student.roll_no }}
-                    </p>
-
-                </div>
-
             </div>
 
 
-            <!-- STUDENT INFORMATION -->
+            <div class="col-md-9">
 
-            <h2 class="section-title">
-                Student Information
-            </h2>
+                <h2 class="fw-bold">
+                    {{ student["name"] }}
+                </h2>
 
+                <p class="mb-1">
+                    <strong>Roll No:</strong>
+                    {{ student["roll_no"] }}
+                </p>
 
-            <div class="details-grid">
+                <p class="mb-1">
+                    <strong>Department:</strong>
+                    {{ student["department"] }}
+                </p>
 
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Roll Number
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.roll_no }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Name
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.name }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Department
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.department }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Year
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.year }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Attendance
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.attendance }}%
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        CGPA
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.cgpa }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Internal Marks
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.internal_marks }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Projects
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.projects }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Skills Score
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.skills_score }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Aptitude Score
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.aptitude_score }}
-                    </span>
-
-                </div>
-
-
-                <div class="detail-box">
-
-                    <span class="detail-label">
-                        Communication Score
-                    </span>
-
-                    <span class="detail-value">
-                        {{ student.communication_score }}
-                    </span>
-
-                </div>
+                <p class="mb-1">
+                    <strong>Year:</strong>
+                    {{ student["year"] }}
+                </p>
 
             </div>
-
-
-            <!-- AI PREDICTION -->
-
-            <h2 class="section-title">
-                AI Prediction
-            </h2>
-
-
-            <div class="prediction-grid">
-
-
-                <!-- PERFORMANCE -->
-
-                <div class="prediction-card">
-
-                    <h3>
-                        Performance
-                    </h3>
-
-                    <div class="prediction-value">
-                        {{ student.performance }}
-                    </div>
-
-                </div>
-
-
-                <!-- PLACEMENT PROBABILITY -->
-
-                <div class="prediction-card">
-
-                    <h3>
-                        Placement Probability
-                    </h3>
-
-                    <div class="probability">
-                        {{ student.placement_probability }}%
-                    </div>
-
-                </div>
-
-
-                <!-- PLACEMENT STATUS -->
-
-                <div class="prediction-card">
-
-                    <h3>
-                        Placement Status
-                    </h3>
-
-                    <div>
-
-                        <span class="status">
-                            {{ student.placement_status }}
-                        </span>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <!-- BACK BUTTON -->
-
-            <a
-                href="{{ url_for('students') }}"
-                class="back-btn"
-            >
-                ← Back to Students
-            </a>
-
 
         </div>
 
     </div>
 
-</body>
+</div>
 
-</html>
+
+<!-- ========================================================
+     AI RESULTS
+========================================================= -->
+
+<div class="row g-4 mb-4">
+
+
+    <div class="col-md-4">
+
+        <div class="card shadow-sm border-0 h-100">
+
+            <div class="card-body text-center">
+
+                <h6 class="text-muted">
+                    AI Performance Score
+                </h6>
+
+                <h1 class="fw-bold text-primary">
+                    {{ student["performance_score"] }}%
+                </h1>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="col-md-4">
+
+        <div class="card shadow-sm border-0 h-100">
+
+            <div class="card-body text-center">
+
+                <h6 class="text-muted">
+                    Placement Probability
+                </h6>
+
+                <h1 class="fw-bold text-success">
+                    {{ student["placement_probability"] }}%
+                </h1>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="col-md-4">
+
+        <div class="card shadow-sm border-0 h-100">
+
+            <div class="card-body text-center">
+
+                <h6 class="text-muted">
+                    Placement Status
+                </h6>
+
+                <h4 class="fw-bold mt-3">
+                    {{ student["placement_status"] }}
+                </h4>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ========================================================
+     ACADEMIC DETAILS
+========================================================= -->
+
+<div class="card shadow-sm border-0 mb-4">
+
+    <div class="card-body">
+
+        <h3 class="fw-bold mb-4">
+            Academic & Skill Details
+        </h3>
+
+
+        <div class="table-responsive">
+
+            <table class="table table-bordered">
+
+                <tbody>
+
+                    <tr>
+                        <th>Attendance</th>
+                        <td>{{ student["attendance"] }}%</td>
+                    </tr>
+
+                    <tr>
+                        <th>CGPA</th>
+                        <td>{{ student["cgpa"] }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Internal Marks</th>
+                        <td>{{ student["internal_marks"] }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Projects</th>
+                        <td>{{ student["projects"] }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Skills Score</th>
+                        <td>{{ student["skills_score"] }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Aptitude Score</th>
+                        <td>{{ student["aptitude_score"] }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Communication Score</th>
+                        <td>{{ student["communication_score"] }}</td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ========================================================
+     ACTIONS
+========================================================= -->
+
+<div class="text-center">
+
+    <a
+        href="{{ url_for('students') }}"
+        class="btn btn-primary"
+    >
+        + Add Another Student
+    </a>
+
+
+    <a
+        href="{{ url_for('dashboard') }}"
+        class="btn btn-outline-primary ms-2"
+    >
+        Dashboard
+    </a>
+
+</div>
+
+{% endblock %}
