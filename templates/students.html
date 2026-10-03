@@ -4,13 +4,11 @@
 Student Registration - AI Student System
 {% endblock %}
 
-
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
 
     <div>
-
         <h1 class="fw-bold">
             Student Registration
         </h1>
@@ -18,9 +16,7 @@ Student Registration - AI Student System
         <p class="text-muted">
             Add student details and generate AI placement prediction.
         </p>
-
     </div>
-
 
     <a
         href="{{ url_for('dashboard') }}"
@@ -32,8 +28,8 @@ Student Registration - AI Student System
 </div>
 
 
-<!-- ========================================================
-     STUDENT FORM
+<!-- =========================================================
+     STUDENT REGISTRATION FORM
 ========================================================= -->
 
 <div class="card shadow-sm border-0 mb-5">
@@ -48,8 +44,7 @@ Student Registration - AI Student System
 
             <div class="row g-3">
 
-
-                <!-- Roll Number -->
+                <!-- ROLL NUMBER -->
 
                 <div class="col-md-6">
 
@@ -68,7 +63,7 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- Name -->
+                <!-- STUDENT NAME -->
 
                 <div class="col-md-6">
 
@@ -87,7 +82,7 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- Department -->
+                <!-- DEPARTMENT -->
 
                 <div class="col-md-6">
 
@@ -105,20 +100,36 @@ Student Registration - AI Student System
                             Select Department
                         </option>
 
-                        {% for department in departments %}
-
-                        <option value="{{ department }}">
-                            {{ department }}
+                        <option value="CS">
+                            CS
                         </option>
 
-                        {% endfor %}
+                        <option value="IT">
+                            IT
+                        </option>
+
+                        <option value="AI">
+                            AI
+                        </option>
+
+                        <option value="BCA">
+                            BCA
+                        </option>
+
+                        <option value="BBA">
+                            BBA
+                        </option>
+
+                        <option value="B.COM">
+                            B.COM
+                        </option>
 
                     </select>
 
                 </div>
 
 
-                <!-- Year -->
+                <!-- YEAR -->
 
                 <div class="col-md-6">
 
@@ -136,20 +147,24 @@ Student Registration - AI Student System
                             Select Year
                         </option>
 
-                        {% for year in years %}
-
-                        <option value="{{ year }}">
-                            {{ year }}
+                        <option value="I">
+                            I
                         </option>
 
-                        {% endfor %}
+                        <option value="II">
+                            II
+                        </option>
+
+                        <option value="III">
+                            III
+                        </option>
 
                     </select>
 
                 </div>
 
 
-                <!-- Profile Photo -->
+                <!-- PROFILE PHOTO -->
 
                 <div class="col-md-12">
 
@@ -174,7 +189,7 @@ Student Registration - AI Student System
                 <hr class="my-3">
 
 
-                <!-- Attendance -->
+                <!-- ATTENDANCE -->
 
                 <div class="col-md-6">
 
@@ -189,6 +204,7 @@ Student Registration - AI Student System
                         min="0"
                         max="100"
                         step="0.01"
+                        placeholder="0 - 100"
                         required
                     >
 
@@ -210,13 +226,14 @@ Student Registration - AI Student System
                         min="0"
                         max="10"
                         step="0.01"
+                        placeholder="0 - 10"
                         required
                     >
 
                 </div>
 
 
-                <!-- Internal Marks -->
+                <!-- INTERNAL MARKS -->
 
                 <div class="col-md-6">
 
@@ -231,13 +248,14 @@ Student Registration - AI Student System
                         min="0"
                         max="100"
                         step="0.01"
+                        placeholder="0 - 100"
                         required
                     >
 
                 </div>
 
 
-                <!-- Projects -->
+                <!-- PROJECTS -->
 
                 <div class="col-md-6">
 
@@ -252,13 +270,14 @@ Student Registration - AI Student System
                         min="0"
                         max="20"
                         step="1"
+                        placeholder="0 - 20"
                         required
                     >
 
                 </div>
 
 
-                <!-- Skills -->
+                <!-- SKILLS SCORE -->
 
                 <div class="col-md-4">
 
@@ -273,13 +292,14 @@ Student Registration - AI Student System
                         min="0"
                         max="100"
                         step="0.01"
+                        placeholder="0 - 100"
                         required
                     >
 
                 </div>
 
 
-                <!-- Aptitude -->
+                <!-- APTITUDE SCORE -->
 
                 <div class="col-md-4">
 
@@ -294,13 +314,14 @@ Student Registration - AI Student System
                         min="0"
                         max="100"
                         step="0.01"
+                        placeholder="0 - 100"
                         required
                     >
 
                 </div>
 
 
-                <!-- Communication -->
+                <!-- COMMUNICATION SCORE -->
 
                 <div class="col-md-4">
 
@@ -315,13 +336,14 @@ Student Registration - AI Student System
                         min="0"
                         max="100"
                         step="0.01"
+                        placeholder="0 - 100"
                         required
                     >
 
                 </div>
 
 
-                <!-- Submit -->
+                <!-- SUBMIT -->
 
                 <div class="col-12 mt-4">
 
@@ -350,7 +372,7 @@ Student Registration - AI Student System
 </div>
 
 
-<!-- ========================================================
+<!-- =========================================================
      REGISTERED STUDENTS
 ========================================================= -->
 
@@ -393,6 +415,8 @@ Student Registration - AI Student System
 
                     <tr>
 
+                        <!-- PHOTO -->
+
                         <td>
 
                             {% if student["profile_picture"] %}
@@ -406,6 +430,7 @@ Student Registration - AI Student System
                                 height="50"
                                 class="rounded-circle"
                                 style="object-fit: cover;"
+                                alt="Student Photo"
                             >
 
                             {% else %}
@@ -419,35 +444,49 @@ Student Registration - AI Student System
                         </td>
 
 
+                        <!-- ROLL NUMBER -->
+
                         <td>
                             {{ student["roll_no"] }}
                         </td>
 
+
+                        <!-- NAME -->
 
                         <td>
                             {{ student["name"] }}
                         </td>
 
 
+                        <!-- DEPARTMENT -->
+
                         <td>
                             {{ student["department"] }}
                         </td>
 
+
+                        <!-- YEAR -->
 
                         <td>
                             {{ student["year"] }}
                         </td>
 
 
+                        <!-- CGPA -->
+
                         <td>
                             {{ student["cgpa"] }}
                         </td>
 
 
+                        <!-- PLACEMENT -->
+
                         <td>
                             {{ student["placement_probability"] }}%
                         </td>
 
+
+                        <!-- ACTION -->
 
                         <td>
 
