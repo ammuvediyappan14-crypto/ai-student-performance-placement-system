@@ -13,41 +13,56 @@ import os
 import pickle
 import sqlite3
 from pathlib import Path
+from datetime import timedelta
+
 import numpy as np
 
 
 # ============================================================
-# PROJECT PATHS
+# PATHS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 
 DATABASE = BASE_DIR / "student_system.db"
+
 MODEL_DIR = BASE_DIR / "models"
 
 PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
+
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 
 
 # ============================================================
-# FLASK APP
+# FLASK
 # ============================================================
 
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "development-secret-key"
+    "ai-student-performance-secret-key"
 )
 
-# Session settings
-app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_NAME"] = (
+    "student_system_session_v3"
+)
+
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# Upload settings
-app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
+app.config["SESSION_COOKIE_SECURE"] = False
+
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
+    hours=12
+)
+
+app.config["UPLOAD_FOLDER"] = str(
+    UPLOAD_FOLDER
+)
 
 UPLOAD_FOLDER.mkdir(
     parents=True,
@@ -71,7 +86,7 @@ FEATURES = [
 
 
 # ============================================================
-# DATABASE CONNECTION
+# DATABASE
 # ============================================================
 
 def get_database():
@@ -86,7 +101,7 @@ def get_database():
 
 
 # ============================================================
-# INITIALIZE DATABASE
+# DATABASE INITIALIZATION
 # ============================================================
 
 def initialize_database():
@@ -142,10 +157,6 @@ def initialize_database():
         """
     )
 
-    # --------------------------------------------------------
-    # Check existing database columns
-    # --------------------------------------------------------
-
     columns = connection.execute(
         "PRAGMA table_info(students)"
     ).fetchall()
@@ -154,10 +165,6 @@ def initialize_database():
         column["name"]
         for column in columns
     ]
-
-    # --------------------------------------------------------
-    # Add profile_picture if old database doesn't have it
-    # --------------------------------------------------------
 
     if "profile_picture" not in column_names:
 
@@ -174,7 +181,7 @@ def initialize_database():
 
 
 # ============================================================
-# LOAD / TRAIN ML MODELS
+# LOAD MODELS
 # ============================================================
 
 def load_models():
@@ -238,9 +245,9 @@ def predict_student(values):
     )[0]
 
     probability = (
-        placement_model
-        .predict_proba(input_data)[0][1]
-        * 100
+        placement_model.predict_proba(
+            input_data
+        )[0][1] * 100
     )
 
     probability = round(
@@ -270,7 +277,7 @@ def predict_student(values):
 @app.route("/")
 def home():
 
-    if "admin" in session:
+    if session.get("admin"):
 
         return redirect(
             url_for("dashboard")
@@ -303,10 +310,6 @@ def login():
             ""
         )
 
-        # ----------------------------------------------------
-        # ADMIN LOGIN
-        # ----------------------------------------------------
-
         if (
             username == "admin"
             and password == "admin123"
@@ -314,7 +317,7 @@ def login():
 
             session.clear()
 
-            session["admin"] = username
+            session["admin"] = "admin"
 
             session.permanent = True
 
@@ -353,7 +356,7 @@ def logout():
 @app.route("/dashboard")
 def dashboard():
 
-    if "admin" not in session:
+    if not session.get("admin"):
 
         return redirect(
             url_for("login")
@@ -361,20 +364,12 @@ def dashboard():
 
     connection = get_database()
 
-    # --------------------------------------------------------
-    # Total students
-    # --------------------------------------------------------
-
     total_students = connection.execute(
         """
         SELECT COUNT(*) AS count
         FROM students
         """
     ).fetchone()["count"]
-
-    # --------------------------------------------------------
-    # Placed students
-    # --------------------------------------------------------
 
     placed_students = connection.execute(
         """
@@ -387,20 +382,12 @@ def dashboard():
         )
     ).fetchone()["count"]
 
-    # --------------------------------------------------------
-    # Average CGPA
-    # --------------------------------------------------------
-
     average_cgpa = connection.execute(
         """
         SELECT AVG(cgpa) AS average
         FROM students
         """
     ).fetchone()["average"]
-
-    # --------------------------------------------------------
-    # Average placement probability
-    # --------------------------------------------------------
 
     average_probability = connection.execute(
         """
@@ -409,16 +396,12 @@ def dashboard():
         """
     ).fetchone()["average"]
 
-    # --------------------------------------------------------
-    # Recent students
-    # --------------------------------------------------------
-
     recent_students = connection.execute(
         """
         SELECT *
         FROM students
         ORDER BY id DESC
-        LIMIT 50
+        LIMIT 10
         """
     ).fetchall()
 
@@ -427,7 +410,6 @@ def dashboard():
     return render_template(
         "dashboard.html",
 
-        # Names used by dashboard.html
         total_students=total_students,
 
         placed_students=placed_students,
@@ -448,6 +430,8 @@ def dashboard():
 
 # ============================================================
 # STUDENTS
+# GET  -> FORM + EXISTING STUDENTS
+# POST -> SAVE STUDENT + AI PREDICTION
 # ============================================================
 
 @app.route(
@@ -456,18 +440,14 @@ def dashboard():
 )
 def students():
 
-    # --------------------------------------------------------
-    # LOGIN CHECK
-    # --------------------------------------------------------
-
-    if "admin" not in session:
+    if not session.get("admin"):
 
         return redirect(
             url_for("login")
         )
 
     # ========================================================
-    # POST - ADD STUDENT
+    # POST
     # ========================================================
 
     if request.method == "POST":
@@ -475,7 +455,185 @@ def students():
         try:
 
             # ------------------------------------------------
-            # PROFILE PICTURE
+            # BASIC DETAILS
+            # ------------------------------------------------
+
+            roll_no = request.form.get(
+                "roll_no",
+                ""
+            ).strip()
+
+            name = request.form.get(
+                "name",
+                ""
+            ).strip()
+
+            department = request.form.get(
+                "department",
+                ""
+            ).strip()
+
+            year = request.form.get(
+                "year",
+                ""
+            ).strip()
+
+            # ------------------------------------------------
+            # REQUIRED FIELD CHECK
+            # ------------------------------------------------
+
+            if not roll_no:
+                raise ValueError(
+                    "Roll number is required."
+                )
+
+            if not name:
+                raise ValueError(
+                    "Student name is required."
+                )
+
+            if not department:
+                raise ValueError(
+                    "Department is required."
+                )
+
+            if not year:
+                raise ValueError(
+                    "Year is required."
+                )
+
+            # ------------------------------------------------
+            # NUMERIC VALUES
+            # ------------------------------------------------
+
+            values = {
+
+                "attendance": float(
+                    request.form.get(
+                        "attendance",
+                        0
+                    )
+                ),
+
+                "cgpa": float(
+                    request.form.get(
+                        "cgpa",
+                        0
+                    )
+                ),
+
+                "internal_marks": float(
+                    request.form.get(
+                        "internal_marks",
+                        0
+                    )
+                ),
+
+                "projects": int(
+                    request.form.get(
+                        "projects",
+                        0
+                    )
+                ),
+
+                "skills_score": float(
+                    request.form.get(
+                        "skills_score",
+                        0
+                    )
+                ),
+
+                "aptitude_score": float(
+                    request.form.get(
+                        "aptitude_score",
+                        0
+                    )
+                ),
+
+                "communication_score": float(
+                    request.form.get(
+                        "communication_score",
+                        0
+                    )
+                )
+            }
+
+            # ------------------------------------------------
+            # RANGE VALIDATION
+            # ------------------------------------------------
+
+            ranges = [
+
+                (
+                    "Attendance",
+                    values["attendance"],
+                    0,
+                    100
+                ),
+
+                (
+                    "CGPA",
+                    values["cgpa"],
+                    0,
+                    10
+                ),
+
+                (
+                    "Internal marks",
+                    values["internal_marks"],
+                    0,
+                    100
+                ),
+
+                (
+                    "Projects",
+                    values["projects"],
+                    0,
+                    20
+                ),
+
+                (
+                    "Skills score",
+                    values["skills_score"],
+                    0,
+                    100
+                ),
+
+                (
+                    "Aptitude score",
+                    values["aptitude_score"],
+                    0,
+                    100
+                ),
+
+                (
+                    "Communication score",
+                    values["communication_score"],
+                    0,
+                    100
+                )
+            ]
+
+            for (
+                field_name,
+                value,
+                minimum,
+                maximum
+            ) in ranges:
+
+                if not (
+                    minimum
+                    <= value
+                    <= maximum
+                ):
+
+                    raise ValueError(
+                        f"{field_name} must be between "
+                        f"{minimum} and {maximum}."
+                    )
+
+            # ------------------------------------------------
+            # PROFILE PHOTO
             # ------------------------------------------------
 
             profile_picture = request.files.get(
@@ -489,113 +647,40 @@ def students():
                 and profile_picture.filename
             ):
 
-                filename = Path(
+                original_name = Path(
                     profile_picture.filename
                 ).name
 
+                extension = Path(
+                    original_name
+                ).suffix.lower()
+
+                allowed_extensions = {
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".webp"
+                }
+
+                if extension not in allowed_extensions:
+
+                    raise ValueError(
+                        "Only JPG, JPEG, PNG and WEBP "
+                        "profile photos are allowed."
+                    )
+
+                # Unique filename
+                import uuid
+
+                profile_picture_name = (
+                    str(uuid.uuid4())
+                    + extension
+                )
+
                 profile_picture.save(
-                    UPLOAD_FOLDER / filename
+                    UPLOAD_FOLDER
+                    / profile_picture_name
                 )
-
-                profile_picture_name = filename
-
-            # ------------------------------------------------
-            # STUDENT VALUES
-            # ------------------------------------------------
-
-            values = {
-
-                "attendance": float(
-                    request.form["attendance"]
-                ),
-
-                "cgpa": float(
-                    request.form["cgpa"]
-                ),
-
-                "internal_marks": float(
-                    request.form["internal_marks"]
-                ),
-
-                "projects": int(
-                    request.form["projects"]
-                ),
-
-                "skills_score": float(
-                    request.form["skills_score"]
-                ),
-
-                "aptitude_score": float(
-                    request.form["aptitude_score"]
-                ),
-
-                "communication_score": float(
-                    request.form["communication_score"]
-                )
-            }
-
-            # ------------------------------------------------
-            # VALIDATION
-            # ------------------------------------------------
-
-            ranges = [
-
-                (
-                    values["attendance"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["cgpa"],
-                    0,
-                    10
-                ),
-
-                (
-                    values["internal_marks"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["projects"],
-                    0,
-                    20
-                ),
-
-                (
-                    values["skills_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["aptitude_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    values["communication_score"],
-                    0,
-                    100
-                )
-            ]
-
-            for (
-                value,
-                minimum,
-                maximum
-            ) in ranges:
-
-                if not (
-                    minimum
-                    <= value
-                    <= maximum
-                ):
-
-                    raise ValueError
 
             # ------------------------------------------------
             # AI PREDICTION
@@ -610,12 +695,12 @@ def students():
             )
 
             # ------------------------------------------------
-            # DATABASE INSERT
+            # SAVE STUDENT
             # ------------------------------------------------
 
             connection = get_database()
 
-            connection.execute(
+            cursor = connection.execute(
                 """
                 INSERT INTO students (
 
@@ -649,51 +734,29 @@ def students():
                 """,
                 (
 
-                    request.form[
-                        "roll_no"
-                    ].strip(),
+                    roll_no,
 
-                    request.form[
-                        "name"
-                    ].strip(),
+                    name,
 
-                    request.form[
-                        "department"
-                    ].strip(),
+                    department,
 
                     profile_picture_name,
 
-                    request.form[
-                        "year"
-                    ].strip(),
+                    year,
 
-                    values[
-                        "attendance"
-                    ],
+                    values["attendance"],
 
-                    values[
-                        "cgpa"
-                    ],
+                    values["cgpa"],
 
-                    values[
-                        "internal_marks"
-                    ],
+                    values["internal_marks"],
 
-                    values[
-                        "projects"
-                    ],
+                    values["projects"],
 
-                    values[
-                        "skills_score"
-                    ],
+                    values["skills_score"],
 
-                    values[
-                        "aptitude_score"
-                    ],
+                    values["aptitude_score"],
 
-                    values[
-                        "communication_score"
-                    ],
+                    values["communication_score"],
 
                     performance,
 
@@ -703,17 +766,27 @@ def students():
                 )
             )
 
+            student_id = cursor.lastrowid
+
             connection.commit()
 
             connection.close()
 
             flash(
-                "Student added successfully and AI prediction generated.",
+                "Student added successfully. "
+                "AI performance and placement prediction generated.",
                 "success"
             )
 
+            # ------------------------------------------------
+            # DIRECTLY OPEN SAVED STUDENT DETAILS
+            # ------------------------------------------------
+
             return redirect(
-                url_for("students")
+                url_for(
+                    "student_detail",
+                    student_id=student_id
+                )
             )
 
         # ----------------------------------------------------
@@ -723,21 +796,18 @@ def students():
         except sqlite3.IntegrityError:
 
             flash(
-                "Roll number already exists.",
+                "This roll number already exists.",
                 "danger"
             )
 
         # ----------------------------------------------------
-        # INVALID VALUES
+        # VALIDATION
         # ----------------------------------------------------
 
-        except (
-            KeyError,
-            ValueError
-        ):
+        except ValueError as error:
 
             flash(
-                "Please enter valid values.",
+                str(error),
                 "danger"
             )
 
@@ -748,17 +818,18 @@ def students():
         except Exception as error:
 
             print(
-                "STUDENT ERROR:",
+                "STUDENT SAVE ERROR:",
                 error
             )
 
             flash(
-                "Unable to add student. Please check the entered details.",
+                "Unable to add student. "
+                "Please check the entered details.",
                 "danger"
             )
 
     # ========================================================
-    # GET - SHOW STUDENTS
+    # GET
     # ========================================================
 
     connection = get_database()
@@ -780,7 +851,7 @@ def students():
 
 
 # ============================================================
-# UPLOADED PROFILE PICTURES
+# PROFILE PHOTO
 # ============================================================
 
 @app.route(
@@ -795,7 +866,7 @@ def uploaded_file(filename):
 
 
 # ============================================================
-# STUDENT DETAILS / AI PREDICTION
+# STUDENT DETAILS / PREDICTION
 # ============================================================
 
 @app.route(
@@ -803,7 +874,7 @@ def uploaded_file(filename):
 )
 def student_detail(student_id):
 
-    if "admin" not in session:
+    if not session.get("admin"):
 
         return redirect(
             url_for("login")
@@ -851,7 +922,7 @@ def student_detail(student_id):
 )
 def delete_student(student_id):
 
-    if "admin" not in session:
+    if not session.get("admin"):
 
         return redirect(
             url_for("login")
@@ -884,7 +955,7 @@ def delete_student(student_id):
 
 
 # ============================================================
-# HEALTH CHECK
+# HEALTH
 # ============================================================
 
 @app.route("/health")
@@ -893,16 +964,6 @@ def health():
     return {
         "status": "ok"
     }
-
-
-# ============================================================
-# TEST ROUTE
-# ============================================================
-
-@app.route("/test-students")
-def test_students():
-
-    return "STUDENTS ROUTE IS WORKING"
 
 
 # ============================================================
