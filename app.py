@@ -11,7 +11,8 @@ from flask import (
 
 import os
 import pickle
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from pathlib import Path
 from datetime import timedelta
 
@@ -24,8 +25,6 @@ import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DATABASE = BASE_DIR / "student_system.db"
-
 MODEL_DIR = BASE_DIR / "models"
 
 PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
@@ -33,6 +32,13 @@ PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
 PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
 
 UPLOAD_FOLDER = BASE_DIR / "uploads"
+
+
+# ============================================================
+# DATABASE URL
+# ============================================================
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 # ============================================================
@@ -86,18 +92,59 @@ FEATURES = [
 
 
 # ============================================================
-# DATABASE
+# POSTGRESQL DATABASE CONNECTION
 # ============================================================
+
+class DatabaseConnection:
+
+    def __init__(self):
+
+        if not DATABASE_URL:
+
+            raise RuntimeError(
+                "DATABASE_URL environment variable is not configured."
+            )
+
+        self.connection = psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=RealDictCursor
+        )
+
+    def execute(self, query, params=None):
+
+        # Convert SQLite-style placeholders
+        # to PostgreSQL placeholders.
+
+        query = query.replace(
+            "?",
+            "%s"
+        )
+
+        cursor = self.connection.cursor()
+
+        cursor.execute(
+            query,
+            params or ()
+        )
+
+        return cursor
+
+    def commit(self):
+
+        self.connection.commit()
+
+    def rollback(self):
+
+        self.connection.rollback()
+
+    def close(self):
+
+        self.connection.close()
+
 
 def get_database():
 
-    connection = sqlite3.connect(
-        DATABASE
-    )
-
-    connection.row_factory = sqlite3.Row
-
-    return connection
+    return DatabaseConnection()
 
 
 # ============================================================
@@ -122,7 +169,7 @@ def initialize_database():
         """
         CREATE TABLE IF NOT EXISTS students (
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
 
             roll_no TEXT UNIQUE NOT NULL,
 
@@ -156,24 +203,6 @@ def initialize_database():
         )
         """
     )
-
-    columns = connection.execute(
-        "PRAGMA table_info(students)"
-    ).fetchall()
-
-    column_names = [
-        column["name"]
-        for column in columns
-    ]
-
-    if "profile_picture" not in column_names:
-
-        connection.execute(
-            """
-            ALTER TABLE students
-            ADD COLUMN profile_picture TEXT
-            """
-        )
 
     connection.commit()
 
@@ -452,6 +481,8 @@ def students():
 
     if request.method == "POST":
 
+        connection = None
+
         try:
 
             # ------------------------------------------------
@@ -483,21 +514,25 @@ def students():
             # ------------------------------------------------
 
             if not roll_no:
+
                 raise ValueError(
                     "Roll number is required."
                 )
 
             if not name:
+
                 raise ValueError(
                     "Student name is required."
                 )
 
             if not department:
+
                 raise ValueError(
                     "Department is required."
                 )
 
             if not year:
+
                 raise ValueError(
                     "Year is required."
                 )
@@ -669,7 +704,6 @@ def students():
                         "profile photos are allowed."
                     )
 
-                # Unique filename
                 import uuid
 
                 profile_picture_name = (
@@ -695,7 +729,7 @@ def students():
             )
 
             # ------------------------------------------------
-            # SAVE STUDENT
+            # SAVE STUDENT TO POSTGRESQL
             # ------------------------------------------------
 
             connection = get_database()
@@ -731,6 +765,8 @@ def students():
                     ?, ?, ?,
                     ?, ?, ?
                 )
+
+                RETURNING id
                 """,
                 (
 
@@ -766,11 +802,14 @@ def students():
                 )
             )
 
-            student_id = cursor.lastrowid
+            # PostgreSQL returns inserted ID
+            student_id = cursor.fetchone()["id"]
 
             connection.commit()
 
             connection.close()
+
+            connection = None
 
             flash(
                 "Student added successfully. "
@@ -779,7 +818,7 @@ def students():
             )
 
             # ------------------------------------------------
-            # DIRECTLY OPEN SAVED STUDENT DETAILS
+            # OPEN SAVED STUDENT DETAILS
             # ------------------------------------------------
 
             return redirect(
@@ -793,7 +832,12 @@ def students():
         # DUPLICATE ROLL NUMBER
         # ----------------------------------------------------
 
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
+
+            if connection:
+
+                connection.rollback()
+                connection.close()
 
             flash(
                 "This roll number already exists.",
@@ -806,6 +850,11 @@ def students():
 
         except ValueError as error:
 
+            if connection:
+
+                connection.rollback()
+                connection.close()
+
             flash(
                 str(error),
                 "danger"
@@ -816,6 +865,11 @@ def students():
         # ----------------------------------------------------
 
         except Exception as error:
+
+            if connection:
+
+                connection.rollback()
+                connection.close()
 
             print(
                 "STUDENT SAVE ERROR:",
@@ -955,7 +1009,7 @@ def delete_student(student_id):
 
 
 # ============================================================
-# HEALTH
+# HEALTH CHECK
 # ============================================================
 
 @app.route("/health")
