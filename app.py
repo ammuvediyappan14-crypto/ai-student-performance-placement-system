@@ -1,12 +1,12 @@
 import os
-import uuid
 import pickle
 from pathlib import Path
+from io import BytesIO
 
 import numpy as np
 import psycopg2
-from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
+
 from flask import (
     Flask,
     render_template,
@@ -18,8 +18,8 @@ from flask import (
     jsonify,
     send_file,
 )
+
 from werkzeug.utils import secure_filename
-from io import BytesIO
 
 
 # =========================================================
@@ -39,6 +39,11 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
+
+# Legacy uploads folder.
+# This is used ONLY to recover old profile photos
+# if they still exist from the previous version.
+LEGACY_UPLOAD_FOLDER = BASE_DIR / "uploads"
 
 
 # =========================================================
@@ -75,7 +80,14 @@ class DatabaseConnection:
 
         return self.connection
 
-    def execute(self, query, params=None, fetch=False, fetchone=False):
+    def execute(
+        self,
+        query,
+        params=None,
+        fetch=False,
+        fetchone=False
+    ):
+
         self.connect()
 
         try:
@@ -83,7 +95,10 @@ class DatabaseConnection:
                 cursor_factory=RealDictCursor
             )
 
-            cursor.execute(query, params or ())
+            cursor.execute(
+                query,
+                params or ()
+            )
 
             result = None
 
@@ -100,10 +115,13 @@ class DatabaseConnection:
             return result
 
         except Exception:
+
             self.connection.rollback()
+
             raise
 
         finally:
+
             self.connection.close()
 
 
@@ -175,14 +193,12 @@ def initialize_database():
 
         if not result["exists"]:
 
-            alter_query = sql.SQL(
-                "ALTER TABLE students ADD COLUMN {} {}"
-            ).format(
-                sql.Identifier(column_name),
-                sql.SQL(column_type)
-            )
+            alter_query = f"""
+            ALTER TABLE students
+            ADD COLUMN {column_name} {column_type}
+            """
 
-            db.execute(alter_query.as_string(db.connect()))
+            db.execute(alter_query)
 
 
 # =========================================================
@@ -201,8 +217,13 @@ def load_models():
     performance_model = None
     placement_model = None
 
-    performance_model_path = MODELS_DIR / "performance_model.pkl"
-    placement_model_path = MODELS_DIR / "placement_model.pkl"
+    performance_model_path = (
+        MODELS_DIR / "performance_model.pkl"
+    )
+
+    placement_model_path = (
+        MODELS_DIR / "placement_model.pkl"
+    )
 
     try:
 
@@ -264,10 +285,16 @@ def calculate_fallback_prediction(data):
     projects = float(data["projects"])
     skills_score = float(data["skills_score"])
     aptitude_score = float(data["aptitude_score"])
-    communication_score = float(data["communication_score"])
+    communication_score = float(
+        data["communication_score"]
+    )
 
     cgpa_score = cgpa * 10
-    project_score = min(projects / 20 * 100, 100)
+
+    project_score = min(
+        projects / 20 * 100,
+        100
+    )
 
     score = (
         attendance * 0.15
@@ -280,34 +307,47 @@ def calculate_fallback_prediction(data):
     )
 
     performance_score = round(
-        max(0, min(score, 100)),
+        max(
+            0,
+            min(score, 100)
+        ),
         2
     )
 
     if performance_score >= 75:
+
         performance = "Excellent"
 
     elif performance_score >= 60:
+
         performance = "Good"
 
     elif performance_score >= 45:
+
         performance = "Average"
 
     else:
+
         performance = "Needs Improvement"
 
     placement_probability = round(
-        max(0, min(score, 100)),
+        max(
+            0,
+            min(score, 100)
+        ),
         2
     )
 
     if placement_probability >= 75:
+
         placement_status = "High"
 
     elif placement_probability >= 50:
+
         placement_status = "Medium"
 
     else:
+
         placement_status = "Low"
 
     return (
@@ -332,17 +372,15 @@ def predict_student(data):
         ]
     ])
 
-    # -----------------------------------------------------
-    # TRY TRAINED MODELS
-    # -----------------------------------------------------
-
     try:
 
         if performance_model is not None:
 
-            performance_prediction = performance_model.predict(
-                features
-            )[0]
+            performance_prediction = (
+                performance_model.predict(
+                    features
+                )[0]
+            )
 
             performance = str(
                 performance_prediction
@@ -368,20 +406,26 @@ def predict_student(data):
                 if len(probabilities) > 1:
 
                     placement_probability = (
-                        float(probabilities[-1]) * 100
+                        float(
+                            probabilities[-1]
+                        ) * 100
                     )
 
                 else:
 
                     placement_probability = (
-                        float(probabilities[0]) * 100
+                        float(
+                            probabilities[0]
+                        ) * 100
                     )
 
             else:
 
-                prediction = placement_model.predict(
-                    features
-                )[0]
+                prediction = (
+                    placement_model.predict(
+                        features
+                    )[0]
+                )
 
                 placement_probability = (
                     float(prediction) * 100
@@ -404,19 +448,21 @@ def predict_student(data):
                 "Placement model unavailable"
             )
 
-        # Performance score based on probability
         performance_score = round(
             placement_probability,
             2
         )
 
         if placement_probability >= 75:
+
             placement_status = "High"
 
         elif placement_probability >= 50:
+
             placement_status = "Medium"
 
         else:
+
             placement_status = "Low"
 
         return (
@@ -447,7 +493,9 @@ def allowed_image(filename):
     if not filename:
         return False
 
-    filename = secure_filename(filename)
+    filename = secure_filename(
+        filename
+    )
 
     if "." not in filename:
         return False
@@ -462,6 +510,14 @@ def allowed_image(filename):
 
 def get_image_mimetype(filename):
 
+    filename = secure_filename(
+        filename
+    )
+
+    if "." not in filename:
+
+        return "application/octet-stream"
+
     extension = filename.rsplit(
         ".",
         1
@@ -471,6 +527,125 @@ def get_image_mimetype(filename):
         extension,
         "application/octet-stream"
     )
+
+
+# =========================================================
+# LEGACY PHOTO RECOVERY
+# =========================================================
+
+def find_legacy_profile_image(
+    profile_picture
+):
+    """
+    Find an old profile image stored in the
+    previous local uploads folder.
+
+    Returns:
+        (image_bytes, mimetype)
+        or
+        (None, None)
+    """
+
+    if not profile_picture:
+
+        return None, None
+
+    filename = secure_filename(
+        str(profile_picture)
+    )
+
+    if not filename:
+
+        return None, None
+
+    legacy_file = (
+        LEGACY_UPLOAD_FOLDER / filename
+    )
+
+    if not legacy_file.exists():
+
+        return None, None
+
+    if not legacy_file.is_file():
+
+        return None, None
+
+    try:
+
+        image_data = legacy_file.read_bytes()
+
+    except Exception as error:
+
+        print(
+            "Legacy profile image read failed:",
+            error
+        )
+
+        return None, None
+
+    if not image_data:
+
+        return None, None
+
+    mimetype = get_image_mimetype(
+        filename
+    )
+
+    return image_data, mimetype
+
+
+def migrate_legacy_profile_image(
+    student_id,
+    profile_picture
+):
+    """
+    Recover an old local profile image and
+    permanently store it inside PostgreSQL BYTEA.
+    """
+
+    image_data, mimetype = (
+        find_legacy_profile_image(
+            profile_picture
+        )
+    )
+
+    if not image_data:
+
+        return False
+
+    db = DatabaseConnection()
+
+    try:
+
+        db.execute(
+            """
+            UPDATE students
+            SET
+                profile_image = %s,
+                profile_image_mimetype = %s
+            WHERE id = %s
+            """,
+            (
+                image_data,
+                mimetype,
+                student_id,
+            )
+        )
+
+        print(
+            f"Legacy profile image migrated for student {student_id}."
+        )
+
+        return True
+
+    except Exception as error:
+
+        print(
+            "Legacy profile image migration failed:",
+            error
+        )
+
+        return False
 
 
 # =========================================================
@@ -491,7 +666,10 @@ def home():
     )
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route(
+    "/login",
+    methods=["GET", "POST"]
+)
 def login():
 
     if request.method == "POST":
@@ -557,7 +735,10 @@ def dashboard():
     db = DatabaseConnection()
 
     total_result = db.execute(
-        "SELECT COUNT(*) AS count FROM students",
+        """
+        SELECT COUNT(*) AS count
+        FROM students
+        """,
         fetchone=True
     )
 
@@ -605,12 +786,14 @@ def dashboard():
         else 0
     )
 
-    average_probability_result = db.execute(
-        """
-        SELECT AVG(placement_probability) AS average
-        FROM students
-        """,
-        fetchone=True
+    average_probability_result = (
+        db.execute(
+            """
+            SELECT AVG(placement_probability) AS average
+            FROM students
+            """,
+            fetchone=True
+        )
     )
 
     average_probability = (
@@ -638,6 +821,7 @@ def dashboard():
             year,
             cgpa,
             placement_probability,
+            profile_picture,
             profile_image,
             profile_image_mimetype
         FROM students
@@ -661,7 +845,10 @@ def dashboard():
 # STUDENT REGISTRATION
 # =========================================================
 
-@app.route("/students", methods=["GET", "POST"])
+@app.route(
+    "/students",
+    methods=["GET", "POST"]
+)
 def students():
 
     if not session.get("admin"):
@@ -695,10 +882,6 @@ def students():
                 "year",
                 ""
             ).strip()
-
-            # -------------------------------------------------
-            # FORM VALUES
-            # -------------------------------------------------
 
             attendance = float(
                 request.form.get(
@@ -924,7 +1107,10 @@ def students():
             profile_image = None
             profile_image_mimetype = None
 
-            if profile_file and profile_file.filename:
+            if (
+                profile_file
+                and profile_file.filename
+            ):
 
                 if not allowed_image(
                     profile_file.filename
@@ -941,7 +1127,9 @@ def students():
 
                 profile_file.seek(0)
 
-                profile_image = profile_file.read()
+                profile_image = (
+                    profile_file.read()
+                )
 
                 if not profile_image:
 
@@ -1036,10 +1224,10 @@ def students():
                     name,
                     department,
 
-                    # Old filename field intentionally kept
-                    # for compatibility.
+                    # Kept for compatibility
                     None,
 
+                    # Permanent PostgreSQL storage
                     profile_image,
                     profile_image_mimetype,
 
@@ -1114,6 +1302,7 @@ def students():
             year,
             cgpa,
             placement_probability,
+            profile_picture,
             profile_image,
             profile_image_mimetype
         FROM students
@@ -1132,7 +1321,9 @@ def students():
 # PERMANENT PROFILE PHOTO ROUTE
 # =========================================================
 
-@app.route("/student-photo/<int:student_id>")
+@app.route(
+    "/student-photo/<int:student_id>"
+)
 def student_photo(student_id):
 
     if not session.get("admin"):
@@ -1146,6 +1337,8 @@ def student_photo(student_id):
     student = db.execute(
         """
         SELECT
+            id,
+            profile_picture,
             profile_image,
             profile_image_mimetype
         FROM students
@@ -1162,6 +1355,10 @@ def student_photo(student_id):
             404
         )
 
+    # -----------------------------------------------------
+    # 1. PERMANENT BYTEA PHOTO
+    # -----------------------------------------------------
+
     image_data = student.get(
         "profile_image"
     )
@@ -1170,17 +1367,80 @@ def student_photo(student_id):
         "profile_image_mimetype"
     )
 
-    if not image_data:
+    if image_data:
 
-        return (
-            "Profile photo not available.",
-            404
+        return send_file(
+            BytesIO(image_data),
+            mimetype=mimetype or "image/jpeg",
+            max_age=31536000
         )
 
-    return send_file(
-        BytesIO(image_data),
-        mimetype=mimetype or "image/jpeg",
-        max_age=31536000
+    # -----------------------------------------------------
+    # 2. RECOVER OLD PHOTO
+    # -----------------------------------------------------
+
+    old_photo_filename = student.get(
+        "profile_picture"
+    )
+
+    if old_photo_filename:
+
+        migrated = (
+            migrate_legacy_profile_image(
+                student_id,
+                old_photo_filename
+            )
+        )
+
+        if migrated:
+
+            # Read again from PostgreSQL
+            recovered_student = db.execute(
+                """
+                SELECT
+                    profile_image,
+                    profile_image_mimetype
+                FROM students
+                WHERE id = %s
+                """,
+                (student_id,),
+                fetchone=True
+            )
+
+            if recovered_student:
+
+                recovered_image = (
+                    recovered_student.get(
+                        "profile_image"
+                    )
+                )
+
+                recovered_mimetype = (
+                    recovered_student.get(
+                        "profile_image_mimetype"
+                    )
+                )
+
+                if recovered_image:
+
+                    return send_file(
+                        BytesIO(
+                            recovered_image
+                        ),
+                        mimetype=(
+                            recovered_mimetype
+                            or "image/jpeg"
+                        ),
+                        max_age=31536000
+                    )
+
+    # -----------------------------------------------------
+    # PHOTO NOT FOUND
+    # -----------------------------------------------------
+
+    return (
+        "Profile photo not available.",
+        404
     )
 
 
@@ -1188,7 +1448,9 @@ def student_photo(student_id):
 # STUDENT DETAIL / PREDICTION
 # =========================================================
 
-@app.route("/student/<int:student_id>")
+@app.route(
+    "/student/<int:student_id>"
+)
 def student_detail(student_id):
 
     if not session.get("admin"):
@@ -1302,7 +1564,8 @@ def health():
         return jsonify({
             "status": "ok",
             "database": "connected",
-            "profile_storage": "PostgreSQL BYTEA"
+            "profile_storage": "PostgreSQL BYTEA",
+            "legacy_photo_recovery": "enabled"
         })
 
     except Exception as error:
