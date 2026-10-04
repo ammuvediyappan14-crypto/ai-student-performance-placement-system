@@ -1,3 +1,12 @@
+import os
+import uuid
+import pickle
+from pathlib import Path
+
+import numpy as np
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import RealDictCursor
 from flask import (
     Flask,
     render_template,
@@ -6,128 +15,235 @@ from flask import (
     url_for,
     session,
     flash,
-    send_from_directory,
-    abort
+    jsonify,
+    send_file,
 )
-
-import os
-import pickle
-import uuid
-import mimetypes
-
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-from pathlib import Path
-from datetime import timedelta
-
-import numpy as np
-
 from werkzeug.utils import secure_filename
+from io import BytesIO
 
 
-# ============================================================
-# PATHS
-# ============================================================
-
-BASE_DIR = Path(__file__).resolve().parent
-
-MODEL_DIR = BASE_DIR / "models"
-
-PERFORMANCE_MODEL = MODEL_DIR / "performance_model.pkl"
-
-PLACEMENT_MODEL = MODEL_DIR / "placement_model.pkl"
-
-UPLOAD_FOLDER = BASE_DIR / "uploads"
-
-
-# ============================================================
-# DATABASE URL
-# ============================================================
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-
-# ============================================================
-# FLASK
-# ============================================================
+# =========================================================
+# APP CONFIGURATION
+# =========================================================
 
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "ai-student-performance-secret-key"
+    "student-performance-system-secret-key"
 )
 
-app.config["SESSION_COOKIE_NAME"] = (
-    "student_system_session_v3"
-)
-
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-app.config["SESSION_COOKIE_SECURE"] = False
-
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
-    hours=12
-)
-
-app.config["UPLOAD_FOLDER"] = str(
-    UPLOAD_FOLDER
-)
-
-# Maximum profile image upload size: 5 MB
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# ============================================================
-# CREATE REQUIRED DIRECTORIES
-# ============================================================
-
-MODEL_DIR.mkdir(
-    parents=True,
-    exist_ok=True
-)
-
-UPLOAD_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True
-)
+BASE_DIR = Path(__file__).resolve().parent
+MODELS_DIR = BASE_DIR / "models"
 
 
-# ============================================================
-# CONSTANTS
-# ============================================================
+# =========================================================
+# ALLOWED PROFILE IMAGE TYPES
+# =========================================================
 
-ALLOWED_IMAGE_EXTENSIONS = {
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp"
+ALLOWED_EXTENSIONS = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
 }
 
 
-ALLOWED_DEPARTMENTS = {
-    "CS",
-    "IT",
-    "AI",
-    "BCA",
-    "BBA",
-    "B.COM"
-}
+# =========================================================
+# DATABASE CONNECTION
+# =========================================================
+
+class DatabaseConnection:
+
+    def __init__(self):
+        self.connection = None
+
+    def connect(self):
+        if not DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL environment variable is not configured."
+            )
+
+        self.connection = psycopg2.connect(
+            DATABASE_URL,
+            sslmode="require"
+        )
+
+        return self.connection
+
+    def execute(self, query, params=None, fetch=False, fetchone=False):
+        self.connect()
+
+        try:
+            cursor = self.connection.cursor(
+                cursor_factory=RealDictCursor
+            )
+
+            cursor.execute(query, params or ())
+
+            result = None
+
+            if fetchone:
+                result = cursor.fetchone()
+
+            elif fetch:
+                result = cursor.fetchall()
+
+            self.connection.commit()
+
+            cursor.close()
+
+            return result
+
+        except Exception:
+            self.connection.rollback()
+            raise
+
+        finally:
+            self.connection.close()
 
 
-ALLOWED_YEARS = {
-    "I",
-    "II",
-    "III"
-}
+# =========================================================
+# DATABASE INITIALIZATION
+# =========================================================
+
+def initialize_database():
+
+    db = DatabaseConnection()
+
+    create_table_query = """
+    CREATE TABLE IF NOT EXISTS students (
+        id SERIAL PRIMARY KEY,
+        roll_no TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        department TEXT NOT NULL,
+        profile_picture TEXT,
+        profile_image BYTEA,
+        profile_image_mimetype TEXT,
+        year TEXT NOT NULL,
+
+        attendance REAL NOT NULL,
+        cgpa REAL NOT NULL,
+        internal_marks REAL NOT NULL,
+        projects INTEGER NOT NULL,
+        skills_score REAL NOT NULL,
+        aptitude_score REAL NOT NULL,
+        communication_score REAL NOT NULL,
+
+        performance TEXT,
+        performance_score REAL,
+        placement_probability REAL,
+        placement_status TEXT,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """
+
+    db.execute(create_table_query)
+
+    # -----------------------------------------------------
+    # MIGRATE EXISTING DATABASE
+    # -----------------------------------------------------
+
+    migration_columns = {
+        "profile_image": "BYTEA",
+        "profile_image_mimetype": "TEXT",
+        "performance_score": "REAL",
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    }
+
+    for column_name, column_type in migration_columns.items():
+
+        check_query = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'students'
+            AND column_name = %s
+        ) AS exists;
+        """
+
+        result = db.execute(
+            check_query,
+            (column_name,),
+            fetchone=True
+        )
+
+        if not result["exists"]:
+
+            alter_query = sql.SQL(
+                "ALTER TABLE students ADD COLUMN {} {}"
+            ).format(
+                sql.Identifier(column_name),
+                sql.SQL(column_type)
+            )
+
+            db.execute(alter_query.as_string(db.connect()))
 
 
-# ============================================================
-# ML FEATURES
-# ============================================================
+# =========================================================
+# MODEL LOADING
+# =========================================================
+
+performance_model = None
+placement_model = None
+
+
+def load_models():
+
+    global performance_model
+    global placement_model
+
+    performance_model = None
+    placement_model = None
+
+    performance_model_path = MODELS_DIR / "performance_model.pkl"
+    placement_model_path = MODELS_DIR / "placement_model.pkl"
+
+    try:
+
+        if performance_model_path.exists():
+
+            with open(
+                performance_model_path,
+                "rb"
+            ) as file:
+
+                performance_model = pickle.load(file)
+
+    except Exception as error:
+
+        print(
+            "Performance model loading failed:",
+            error
+        )
+
+    try:
+
+        if placement_model_path.exists():
+
+            with open(
+                placement_model_path,
+                "rb"
+            ) as file:
+
+                placement_model = pickle.load(file)
+
+    except Exception as error:
+
+        print(
+            "Placement model loading failed:",
+            error
+        )
+
+
+# =========================================================
+# AI PREDICTION
+# =========================================================
 
 FEATURES = [
     "attendance",
@@ -136,494 +252,230 @@ FEATURES = [
     "projects",
     "skills_score",
     "aptitude_score",
-    "communication_score"
+    "communication_score",
 ]
 
 
-# ============================================================
-# DATABASE CONNECTION
-# ============================================================
+def calculate_fallback_prediction(data):
 
-class DatabaseConnection:
+    attendance = float(data["attendance"])
+    cgpa = float(data["cgpa"])
+    internal_marks = float(data["internal_marks"])
+    projects = float(data["projects"])
+    skills_score = float(data["skills_score"])
+    aptitude_score = float(data["aptitude_score"])
+    communication_score = float(data["communication_score"])
 
-    def __init__(self):
+    cgpa_score = cgpa * 10
+    project_score = min(projects / 20 * 100, 100)
 
-        if not DATABASE_URL:
-
-            raise RuntimeError(
-                "DATABASE_URL environment variable is not configured."
-            )
-
-        self.connection = psycopg2.connect(
-            DATABASE_URL,
-            cursor_factory=RealDictCursor
-        )
-
-    def execute(self, query, params=None):
-
-        query = query.replace(
-            "?",
-            "%s"
-        )
-
-        cursor = self.connection.cursor()
-
-        cursor.execute(
-            query,
-            params or ()
-        )
-
-        return cursor
-
-    def commit(self):
-
-        self.connection.commit()
-
-    def rollback(self):
-
-        self.connection.rollback()
-
-    def close(self):
-
-        self.connection.close()
-
-
-def get_database():
-
-    return DatabaseConnection()
-
-
-# ============================================================
-# DATABASE INITIALIZATION
-# ============================================================
-
-def initialize_database():
-
-    MODEL_DIR.mkdir(
-        parents=True,
-        exist_ok=True
+    score = (
+        attendance * 0.15
+        + cgpa_score * 0.20
+        + internal_marks * 0.15
+        + project_score * 0.10
+        + skills_score * 0.15
+        + aptitude_score * 0.10
+        + communication_score * 0.15
     )
 
-    UPLOAD_FOLDER.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    connection = None
-
-    try:
-
-        connection = get_database()
-
-        # ----------------------------------------------------
-        # Create table if it does not exist
-        # ----------------------------------------------------
-
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS students (
-
-                id SERIAL PRIMARY KEY,
-
-                roll_no TEXT UNIQUE NOT NULL,
-
-                name TEXT NOT NULL,
-
-                department TEXT NOT NULL,
-
-                profile_picture TEXT,
-
-                year TEXT NOT NULL,
-
-                attendance REAL NOT NULL,
-
-                cgpa REAL NOT NULL,
-
-                internal_marks REAL NOT NULL,
-
-                projects INTEGER NOT NULL,
-
-                skills_score REAL NOT NULL,
-
-                aptitude_score REAL NOT NULL,
-
-                communication_score REAL NOT NULL,
-
-                performance TEXT,
-
-                performance_score REAL,
-
-                placement_probability REAL,
-
-                placement_status TEXT,
-
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        connection.commit()
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # Existing PostgreSQL table may have been created
-        # before profile_picture was added.
-        #
-        # CREATE TABLE IF NOT EXISTS does NOT modify an
-        # existing table.
-        #
-        # Therefore check and add missing columns.
-        # ----------------------------------------------------
-
-        existing_columns_cursor = connection.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name = 'students'
-            """
-        )
-
-        existing_columns = {
-            row["column_name"]
-            for row in existing_columns_cursor.fetchall()
-        }
-
-        required_columns = {
-
-            "profile_picture": """
-                ALTER TABLE students
-                ADD COLUMN profile_picture TEXT
-            """,
-
-            "performance": """
-                ALTER TABLE students
-                ADD COLUMN performance TEXT
-            """,
-
-            "performance_score": """
-                ALTER TABLE students
-                ADD COLUMN performance_score REAL
-            """,
-
-            "placement_probability": """
-                ALTER TABLE students
-                ADD COLUMN placement_probability REAL
-            """,
-
-            "placement_status": """
-                ALTER TABLE students
-                ADD COLUMN placement_status TEXT
-            """,
-
-            "created_at": """
-                ALTER TABLE students
-                ADD COLUMN created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            """
-        }
-
-        for column_name, alter_query in required_columns.items():
-
-            if column_name not in existing_columns:
-
-                try:
-
-                    connection.execute(
-                        alter_query
-                    )
-
-                    connection.commit()
-
-                    print(
-                        f"DATABASE MIGRATION: Added column '{column_name}'"
-                    )
-
-                except Exception as migration_error:
-
-                    connection.rollback()
-
-                    print(
-                        f"DATABASE MIGRATION ERROR "
-                        f"for '{column_name}':",
-                        migration_error
-                    )
-
-        # ----------------------------------------------------
-        # Final commit
-        # ----------------------------------------------------
-
-        connection.commit()
-
-        print(
-            "DATABASE INITIALIZATION SUCCESSFUL"
-        )
-
-    except Exception as error:
-
-        if connection:
-
-            try:
-                connection.rollback()
-            except Exception:
-                pass
-
-        print(
-            "DATABASE INITIALIZATION ERROR:",
-            error
-        )
-
-        raise
-
-    finally:
-
-        if connection:
-
-            try:
-                connection.close()
-            except Exception:
-                pass
-
-
-# ============================================================
-# LOAD MODELS
-# ============================================================
-
-def load_models():
-
-    if (
-        not PERFORMANCE_MODEL.exists()
-        or not PLACEMENT_MODEL.exists()
-    ):
-
-        from train_model import train_models
-
-        train_models()
-
-    with open(
-        PERFORMANCE_MODEL,
-        "rb"
-    ) as file:
-
-        performance_model = pickle.load(
-            file
-        )
-
-    with open(
-        PLACEMENT_MODEL,
-        "rb"
-    ) as file:
-
-        placement_model = pickle.load(
-            file
-        )
-
-    return (
-        performance_model,
-        placement_model
-    )
-
-
-# ============================================================
-# AI PREDICTION
-# ============================================================
-
-def predict_student(values):
-
-    (
-        performance_model,
-        placement_model
-    ) = load_models()
-
-    input_data = np.array(
-        [
-            [
-                values[feature]
-                for feature in FEATURES
-            ]
-        ],
-        dtype=float
-    )
-
-    performance = performance_model.predict(
-        input_data
-    )[0]
-
-    probability = (
-        placement_model.predict_proba(
-            input_data
-        )[0][1] * 100
-    )
-
-    probability = round(
-        float(probability),
+    performance_score = round(
+        max(0, min(score, 100)),
         2
     )
 
-    if probability >= 60:
+    if performance_score >= 75:
+        performance = "Excellent"
 
-        status = "Likely to be Placed"
+    elif performance_score >= 60:
+        performance = "Good"
+
+    elif performance_score >= 45:
+        performance = "Average"
 
     else:
+        performance = "Needs Improvement"
 
-        status = "Needs Improvement"
+    placement_probability = round(
+        max(0, min(score, 100)),
+        2
+    )
+
+    if placement_probability >= 75:
+        placement_status = "High"
+
+    elif placement_probability >= 50:
+        placement_status = "Medium"
+
+    else:
+        placement_status = "Low"
 
     return (
-        str(performance),
-        probability,
-        status
+        performance,
+        performance_score,
+        placement_probability,
+        placement_status,
     )
 
 
-# ============================================================
-# PROFILE PHOTO HELPERS
-# ============================================================
+def predict_student(data):
 
-def get_profile_extension(filename):
+    features = np.array([
+        [
+            float(data["attendance"]),
+            float(data["cgpa"]),
+            float(data["internal_marks"]),
+            float(data["projects"]),
+            float(data["skills_score"]),
+            float(data["aptitude_score"]),
+            float(data["communication_score"]),
+        ]
+    ])
 
-    if not filename:
-
-        return None
-
-    original_name = Path(
-        filename
-    ).name
-
-    safe_name = secure_filename(
-        original_name
-    )
-
-    if not safe_name:
-
-        return None
-
-    extension = Path(
-        safe_name
-    ).suffix.lower()
-
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
-
-        return None
-
-    return extension
-
-
-def save_profile_picture(file):
-
-    """
-    Save uploaded profile picture safely.
-
-    Returns:
-        generated filename or None
-    """
-
-    if not file:
-
-        return None
-
-    if not file.filename:
-
-        return None
-
-    extension = get_profile_extension(
-        file.filename
-    )
-
-    if extension is None:
-
-        raise ValueError(
-            "Only JPG, JPEG, PNG and WEBP "
-            "profile photos are allowed."
-        )
-
-    # --------------------------------------------------------
-    # Generate unique filename.
-    # --------------------------------------------------------
-
-    generated_name = (
-        f"{uuid.uuid4().hex}"
-        f"{extension}"
-    )
-
-    destination = (
-        UPLOAD_FOLDER
-        / generated_name
-    )
-
-    # --------------------------------------------------------
-    # Save file.
-    # --------------------------------------------------------
+    # -----------------------------------------------------
+    # TRY TRAINED MODELS
+    # -----------------------------------------------------
 
     try:
 
-        file.save(
-            str(destination)
+        if performance_model is not None:
+
+            performance_prediction = performance_model.predict(
+                features
+            )[0]
+
+            performance = str(
+                performance_prediction
+            )
+
+        else:
+
+            performance = None
+
+        if placement_model is not None:
+
+            if hasattr(
+                placement_model,
+                "predict_proba"
+            ):
+
+                probabilities = (
+                    placement_model.predict_proba(
+                        features
+                    )[0]
+                )
+
+                if len(probabilities) > 1:
+
+                    placement_probability = (
+                        float(probabilities[-1]) * 100
+                    )
+
+                else:
+
+                    placement_probability = (
+                        float(probabilities[0]) * 100
+                    )
+
+            else:
+
+                prediction = placement_model.predict(
+                    features
+                )[0]
+
+                placement_probability = (
+                    float(prediction) * 100
+                )
+
+            placement_probability = round(
+                max(
+                    0,
+                    min(
+                        placement_probability,
+                        100
+                    )
+                ),
+                2
+            )
+
+        else:
+
+            raise Exception(
+                "Placement model unavailable"
+            )
+
+        # Performance score based on probability
+        performance_score = round(
+            placement_probability,
+            2
+        )
+
+        if placement_probability >= 75:
+            placement_status = "High"
+
+        elif placement_probability >= 50:
+            placement_status = "Medium"
+
+        else:
+            placement_status = "Low"
+
+        return (
+            performance,
+            performance_score,
+            placement_probability,
+            placement_status,
         )
 
     except Exception as error:
 
         print(
-            "PROFILE PHOTO SAVE ERROR:",
+            "Model prediction fallback:",
             error
         )
 
-        raise ValueError(
-            "Unable to save the profile photo."
+        return calculate_fallback_prediction(
+            data
         )
 
-    # --------------------------------------------------------
-    # Verify file really exists.
-    # --------------------------------------------------------
 
-    if not destination.exists():
+# =========================================================
+# IMAGE HELPERS
+# =========================================================
 
-        raise ValueError(
-            "Profile photo upload failed."
-        )
-
-    return generated_name
-
-
-def delete_profile_picture(filename):
-
-    """
-    Delete uploaded profile picture safely.
-    """
+def allowed_image(filename):
 
     if not filename:
+        return False
 
-        return
+    filename = secure_filename(filename)
 
-    try:
+    if "." not in filename:
+        return False
 
-        safe_name = secure_filename(
-            Path(filename).name
-        )
+    extension = filename.rsplit(
+        ".",
+        1
+    )[1].lower()
 
-        if not safe_name:
-
-            return
-
-        file_path = (
-            UPLOAD_FOLDER
-            / safe_name
-        )
-
-        if file_path.exists():
-
-            file_path.unlink()
-
-    except Exception as error:
-
-        print(
-            "PROFILE PHOTO DELETE ERROR:",
-            error
-        )
+    return extension in ALLOWED_EXTENSIONS
 
 
-# ============================================================
-# HOME
-# ============================================================
+def get_image_mimetype(filename):
+
+    extension = filename.rsplit(
+        ".",
+        1
+    )[1].lower()
+
+    return ALLOWED_EXTENSIONS.get(
+        extension,
+        "application/octet-stream"
+    )
+
+
+# =========================================================
+# LOGIN
+# =========================================================
 
 @app.route("/")
 def home():
@@ -639,14 +491,7 @@ def home():
     )
 
 
-# ============================================================
-# LOGIN
-# ============================================================
-
-@app.route(
-    "/login",
-    methods=["GET", "POST"]
-)
+@app.route("/login", methods=["GET", "POST"])
 def login():
 
     if request.method == "POST":
@@ -668,7 +513,7 @@ def login():
 
             session.clear()
 
-            session["admin"] = "admin"
+            session["admin"] = True
 
             session.permanent = True
 
@@ -686,10 +531,6 @@ def login():
     )
 
 
-# ============================================================
-# LOGOUT
-# ============================================================
-
 @app.route("/logout")
 def logout():
 
@@ -700,9 +541,9 @@ def logout():
     )
 
 
-# ============================================================
+# =========================================================
 # DASHBOARD
-# ============================================================
+# =========================================================
 
 @app.route("/dashboard")
 def dashboard():
@@ -713,116 +554,114 @@ def dashboard():
             url_for("login")
         )
 
-    connection = None
+    db = DatabaseConnection()
 
-    try:
+    total_result = db.execute(
+        "SELECT COUNT(*) AS count FROM students",
+        fetchone=True
+    )
 
-        connection = get_database()
+    total_students = (
+        total_result["count"]
+        if total_result
+        else 0
+    )
 
-        total_students = connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM students
-            """
-        ).fetchone()["count"]
+    placed_result = db.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM students
+        WHERE placement_probability >= 50
+        """,
+        fetchone=True
+    )
 
-        placed_students = connection.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM students
-            WHERE placement_status = ?
-            """,
-            (
-                "Likely to be Placed",
-            )
-        ).fetchone()["count"]
+    placed_students = (
+        placed_result["count"]
+        if placed_result
+        else 0
+    )
 
-        average_cgpa = connection.execute(
-            """
-            SELECT AVG(cgpa) AS average
-            FROM students
-            """
-        ).fetchone()["average"]
+    average_cgpa_result = db.execute(
+        """
+        SELECT AVG(cgpa) AS average
+        FROM students
+        """,
+        fetchone=True
+    )
 
-        average_probability = connection.execute(
-            """
-            SELECT AVG(placement_probability) AS average
-            FROM students
-            """
-        ).fetchone()["average"]
-
-        recent_students = connection.execute(
-            """
-            SELECT *
-            FROM students
-            ORDER BY id DESC
-            LIMIT 10
-            """
-        ).fetchall()
-
-        return render_template(
-            "dashboard.html",
-
-            total_students=total_students,
-
-            placed_students=placed_students,
-
-            average_cgpa=round(
-                float(average_cgpa or 0),
-                2
+    average_cgpa = (
+        round(
+            float(
+                average_cgpa_result["average"]
             ),
+            2
+        )
+        if (
+            average_cgpa_result
+            and average_cgpa_result["average"]
+            is not None
+        )
+        else 0
+    )
 
-            average_probability=round(
-                float(average_probability or 0),
-                2
+    average_probability_result = db.execute(
+        """
+        SELECT AVG(placement_probability) AS average
+        FROM students
+        """,
+        fetchone=True
+    )
+
+    average_probability = (
+        round(
+            float(
+                average_probability_result["average"]
             ),
-
-            recent_students=recent_students
+            2
         )
-
-    except Exception as error:
-
-        print(
-            "DASHBOARD ERROR:",
-            error
+        if (
+            average_probability_result
+            and average_probability_result["average"]
+            is not None
         )
+        else 0
+    )
 
-        flash(
-            "Unable to load dashboard.",
-            "danger"
-        )
+    recent_students = db.execute(
+        """
+        SELECT
+            id,
+            roll_no,
+            name,
+            department,
+            year,
+            cgpa,
+            placement_probability,
+            profile_image,
+            profile_image_mimetype
+        FROM students
+        ORDER BY id DESC
+        LIMIT 10
+        """,
+        fetch=True
+    )
 
-        return render_template(
-            "dashboard.html",
-
-            total_students=0,
-
-            placed_students=0,
-
-            average_cgpa=0,
-
-            average_probability=0,
-
-            recent_students=[]
-        )
-
-    finally:
-
-        if connection:
-
-            connection.close()
+    return render_template(
+        "dashboard.html",
+        total_students=total_students,
+        placed_students=placed_students,
+        average_cgpa=average_cgpa,
+        average_probability=average_probability,
+        recent_students=recent_students,
+    )
 
 
-# ============================================================
-# STUDENTS
-# GET  -> FORM + EXISTING STUDENTS
-# POST -> SAVE STUDENT + AI PREDICTION
-# ============================================================
+# =========================================================
+# STUDENT REGISTRATION
+# =========================================================
 
-@app.route(
-    "/students",
-    methods=["GET", "POST"]
-)
+@app.route("/students", methods=["GET", "POST"])
 def students():
 
     if not session.get("admin"):
@@ -831,21 +670,11 @@ def students():
             url_for("login")
         )
 
-    # ========================================================
-    # POST
-    # ========================================================
+    db = DatabaseConnection()
 
     if request.method == "POST":
 
-        connection = None
-
-        uploaded_profile_name = None
-
         try:
-
-            # ------------------------------------------------
-            # BASIC DETAILS
-            # ------------------------------------------------
 
             roll_no = request.form.get(
                 "roll_no",
@@ -867,328 +696,375 @@ def students():
                 ""
             ).strip()
 
-            # ------------------------------------------------
-            # REQUIRED FIELD CHECK
-            # ------------------------------------------------
+            # -------------------------------------------------
+            # FORM VALUES
+            # -------------------------------------------------
 
-            if not roll_no:
+            attendance = float(
+                request.form.get(
+                    "attendance",
+                    0
+                )
+            )
 
-                raise ValueError(
-                    "Roll number is required."
+            cgpa = float(
+                request.form.get(
+                    "cgpa",
+                    0
+                )
+            )
+
+            internal_marks = float(
+                request.form.get(
+                    "internal_marks",
+                    0
+                )
+            )
+
+            projects = int(
+                request.form.get(
+                    "projects",
+                    0
+                )
+            )
+
+            skills_score = float(
+                request.form.get(
+                    "skills_score",
+                    0
+                )
+            )
+
+            aptitude_score = float(
+                request.form.get(
+                    "aptitude_score",
+                    0
+                )
+            )
+
+            communication_score = float(
+                request.form.get(
+                    "communication_score",
+                    0
+                )
+            )
+
+            # -------------------------------------------------
+            # VALIDATION
+            # -------------------------------------------------
+
+            if not roll_no or not name:
+
+                flash(
+                    "Roll number and student name are required.",
+                    "danger"
                 )
 
-            if not name:
-
-                raise ValueError(
-                    "Student name is required."
+                return redirect(
+                    url_for("students")
                 )
 
-            if not department:
+            if department not in [
+                "CS",
+                "IT",
+                "AI",
+                "BCA",
+                "BBA",
+                "B.COM",
+            ]:
 
-                raise ValueError(
-                    "Department is required."
+                flash(
+                    "Invalid department.",
+                    "danger"
                 )
 
-            if department not in ALLOWED_DEPARTMENTS:
-
-                raise ValueError(
-                    "Please select a valid department."
+                return redirect(
+                    url_for("students")
                 )
 
-            if not year:
+            if year not in [
+                "I",
+                "II",
+                "III",
+            ]:
 
-                raise ValueError(
-                    "Year is required."
+                flash(
+                    "Invalid year.",
+                    "danger"
                 )
 
-            if year not in ALLOWED_YEARS:
-
-                raise ValueError(
-                    "Please select a valid year."
+                return redirect(
+                    url_for("students")
                 )
 
-            # ------------------------------------------------
-            # NUMERIC VALUES
-            # ------------------------------------------------
+            if not (
+                0 <= attendance <= 100
+            ):
 
-            values = {
-
-                "attendance": float(
-                    request.form.get(
-                        "attendance",
-                        0
-                    )
-                ),
-
-                "cgpa": float(
-                    request.form.get(
-                        "cgpa",
-                        0
-                    )
-                ),
-
-                "internal_marks": float(
-                    request.form.get(
-                        "internal_marks",
-                        0
-                    )
-                ),
-
-                "projects": int(
-                    request.form.get(
-                        "projects",
-                        0
-                    )
-                ),
-
-                "skills_score": float(
-                    request.form.get(
-                        "skills_score",
-                        0
-                    )
-                ),
-
-                "aptitude_score": float(
-                    request.form.get(
-                        "aptitude_score",
-                        0
-                    )
-                ),
-
-                "communication_score": float(
-                    request.form.get(
-                        "communication_score",
-                        0
-                    )
+                flash(
+                    "Attendance must be between 0 and 100.",
+                    "danger"
                 )
-            }
 
-            # ------------------------------------------------
-            # RANGE VALIDATION
-            # ------------------------------------------------
-
-            ranges = [
-
-                (
-                    "Attendance",
-                    values["attendance"],
-                    0,
-                    100
-                ),
-
-                (
-                    "CGPA",
-                    values["cgpa"],
-                    0,
-                    10
-                ),
-
-                (
-                    "Internal marks",
-                    values["internal_marks"],
-                    0,
-                    100
-                ),
-
-                (
-                    "Projects",
-                    values["projects"],
-                    0,
-                    20
-                ),
-
-                (
-                    "Skills score",
-                    values["skills_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    "Aptitude score",
-                    values["aptitude_score"],
-                    0,
-                    100
-                ),
-
-                (
-                    "Communication score",
-                    values["communication_score"],
-                    0,
-                    100
+                return redirect(
+                    url_for("students")
                 )
-            ]
 
-            for (
-                field_name,
-                value,
-                minimum,
-                maximum
-            ) in ranges:
+            if not (
+                0 <= cgpa <= 10
+            ):
 
-                if not (
-                    minimum
-                    <= value
-                    <= maximum
-                ):
+                flash(
+                    "CGPA must be between 0 and 10.",
+                    "danger"
+                )
 
-                    raise ValueError(
-                        f"{field_name} must be between "
-                        f"{minimum} and {maximum}."
-                    )
+                return redirect(
+                    url_for("students")
+                )
 
-            # ------------------------------------------------
-            # PROFILE PHOTO
-            # ------------------------------------------------
+            if not (
+                0 <= internal_marks <= 100
+            ):
 
-            profile_picture = request.files.get(
+                flash(
+                    "Internal marks must be between 0 and 100.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            if not (
+                0 <= projects <= 20
+            ):
+
+                flash(
+                    "Projects must be between 0 and 20.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            if not (
+                0 <= skills_score <= 100
+            ):
+
+                flash(
+                    "Skills score must be between 0 and 100.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            if not (
+                0 <= aptitude_score <= 100
+            ):
+
+                flash(
+                    "Aptitude score must be between 0 and 100.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            if not (
+                0 <= communication_score <= 100
+            ):
+
+                flash(
+                    "Communication score must be between 0 and 100.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            # -------------------------------------------------
+            # CHECK DUPLICATE ROLL NUMBER
+            # -------------------------------------------------
+
+            existing_student = db.execute(
+                """
+                SELECT id
+                FROM students
+                WHERE roll_no = %s
+                """,
+                (roll_no,),
+                fetchone=True
+            )
+
+            if existing_student:
+
+                flash(
+                    "Roll number already exists.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for("students")
+                )
+
+            # -------------------------------------------------
+            # PROFILE IMAGE
+            # -------------------------------------------------
+
+            profile_file = request.files.get(
                 "profile_picture"
             )
 
-            if (
-                profile_picture is None
-                or not profile_picture.filename
-            ):
+            profile_image = None
+            profile_image_mimetype = None
 
-                # No photo selected.
-                profile_picture_name = None
+            if profile_file and profile_file.filename:
 
-            else:
+                if not allowed_image(
+                    profile_file.filename
+                ):
 
-                profile_picture_name = (
-                    save_profile_picture(
-                        profile_picture
+                    flash(
+                        "Only JPG, JPEG, PNG and WEBP images are allowed.",
+                        "danger"
+                    )
+
+                    return redirect(
+                        url_for("students")
+                    )
+
+                profile_file.seek(0)
+
+                profile_image = profile_file.read()
+
+                if not profile_image:
+
+                    flash(
+                        "The selected profile image is empty.",
+                        "danger"
+                    )
+
+                    return redirect(
+                        url_for("students")
+                    )
+
+                if len(profile_image) > (
+                    5 * 1024 * 1024
+                ):
+
+                    flash(
+                        "Profile image must be below 5 MB.",
+                        "danger"
+                    )
+
+                    return redirect(
+                        url_for("students")
+                    )
+
+                profile_image_mimetype = (
+                    get_image_mimetype(
+                        profile_file.filename
                     )
                 )
 
-                uploaded_profile_name = (
-                    profile_picture_name
-                )
-
-            # ------------------------------------------------
+            # -------------------------------------------------
             # AI PREDICTION
-            # ------------------------------------------------
+            # -------------------------------------------------
+
+            prediction_data = {
+                "attendance": attendance,
+                "cgpa": cgpa,
+                "internal_marks": internal_marks,
+                "projects": projects,
+                "skills_score": skills_score,
+                "aptitude_score": aptitude_score,
+                "communication_score": communication_score,
+            }
 
             (
                 performance,
-                probability,
-                status
+                performance_score,
+                placement_probability,
+                placement_status,
             ) = predict_student(
-                values
+                prediction_data
             )
 
-            # ------------------------------------------------
-            # SAVE STUDENT TO POSTGRESQL
-            # ------------------------------------------------
+            # -------------------------------------------------
+            # INSERT STUDENT
+            # -------------------------------------------------
 
-            connection = get_database()
+            insert_query = """
+            INSERT INTO students (
+                roll_no,
+                name,
+                department,
+                profile_picture,
+                profile_image,
+                profile_image_mimetype,
+                year,
+                attendance,
+                cgpa,
+                internal_marks,
+                projects,
+                skills_score,
+                aptitude_score,
+                communication_score,
+                performance,
+                performance_score,
+                placement_probability,
+                placement_status
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
+            RETURNING id
+            """
 
-            cursor = connection.execute(
-                """
-                INSERT INTO students (
-
+            result = db.execute(
+                insert_query,
+                (
                     roll_no,
                     name,
                     department,
-                    profile_picture,
-                    year,
 
+                    # Old filename field intentionally kept
+                    # for compatibility.
+                    None,
+
+                    profile_image,
+                    profile_image_mimetype,
+
+                    year,
                     attendance,
                     cgpa,
                     internal_marks,
                     projects,
-
                     skills_score,
                     aptitude_score,
                     communication_score,
-
                     performance,
                     performance_score,
                     placement_probability,
-                    placement_status
-
-                )
-
-                VALUES (
-                    ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?, ?
-                )
-
-                RETURNING id
-                """,
-                (
-
-                    roll_no,
-
-                    name,
-
-                    department,
-
-                    profile_picture_name,
-
-                    year,
-
-                    values["attendance"],
-
-                    values["cgpa"],
-
-                    values["internal_marks"],
-
-                    values["projects"],
-
-                    values["skills_score"],
-
-                    values["aptitude_score"],
-
-                    values["communication_score"],
-
-                    performance,
-
-                    float(performance)
-                    if str(performance).replace(
-                        ".",
-                        "",
-                        1
-                    ).isdigit()
-                    else None,
-
-                    probability,
-
-                    status
-                )
+                    placement_status,
+                ),
+                fetchone=True
             )
 
-            student_row = cursor.fetchone()
-
-            if not student_row:
-
-                raise RuntimeError(
-                    "Student ID was not returned by database."
-                )
-
-            student_id = student_row["id"]
-
-            connection.commit()
-
-            connection.close()
-
-            connection = None
-
-            # Photo has been successfully associated
-            # with the database record.
-            uploaded_profile_name = None
+            student_id = result["id"]
 
             flash(
-                "Student added successfully. "
-                "AI performance and placement prediction generated.",
+                "Student registered successfully and profile photo saved permanently.",
                 "success"
             )
-
-            # ------------------------------------------------
-            # OPEN SAVED STUDENT DETAILS
-            # ------------------------------------------------
 
             return redirect(
                 url_for(
@@ -1197,172 +1073,67 @@ def students():
                 )
             )
 
-        # ----------------------------------------------------
-        # DUPLICATE ROLL NUMBER
-        # ----------------------------------------------------
-
-        except psycopg2.IntegrityError as error:
-
-            print(
-                "STUDENT DATABASE INTEGRITY ERROR:",
-                error
-            )
-
-            if connection:
-
-                try:
-                    connection.rollback()
-                except Exception:
-                    pass
-
-                try:
-                    connection.close()
-                except Exception:
-                    pass
-
-                connection = None
-
-            # Remove photo because student was not inserted.
-            if uploaded_profile_name:
-
-                delete_profile_picture(
-                    uploaded_profile_name
-                )
+        except psycopg2.errors.UniqueViolation:
 
             flash(
-                "This roll number already exists.",
+                "Roll number already exists.",
                 "danger"
             )
 
-        # ----------------------------------------------------
-        # VALIDATION
-        # ----------------------------------------------------
-
-        except ValueError as error:
-
-            print(
-                "STUDENT VALIDATION ERROR:",
-                error
+            return redirect(
+                url_for("students")
             )
-
-            if connection:
-
-                try:
-                    connection.rollback()
-                except Exception:
-                    pass
-
-                try:
-                    connection.close()
-                except Exception:
-                    pass
-
-                connection = None
-
-            if uploaded_profile_name:
-
-                delete_profile_picture(
-                    uploaded_profile_name
-                )
-
-            flash(
-                str(error),
-                "danger"
-            )
-
-        # ----------------------------------------------------
-        # OTHER ERROR
-        # ----------------------------------------------------
 
         except Exception as error:
 
             print(
-                "STUDENT SAVE ERROR:",
+                "Student registration error:",
                 error
             )
 
-            if connection:
-
-                try:
-                    connection.rollback()
-                except Exception:
-                    pass
-
-                try:
-                    connection.close()
-                except Exception:
-                    pass
-
-                connection = None
-
-            if uploaded_profile_name:
-
-                delete_profile_picture(
-                    uploaded_profile_name
-                )
-
             flash(
-                "Unable to add student. "
-                "Please check the entered details.",
+                f"Unable to register student: {error}",
                 "danger"
             )
 
-    # ========================================================
-    # GET
-    # ========================================================
+            return redirect(
+                url_for("students")
+            )
 
-    connection = None
+    # ---------------------------------------------------------
+    # GET REGISTERED STUDENTS
+    # ---------------------------------------------------------
 
-    try:
-
-        connection = get_database()
-
-        student_list = connection.execute(
-            """
-            SELECT *
-            FROM students
-            ORDER BY id DESC
-            """
-        ).fetchall()
-
-    except Exception as error:
-
-        print(
-            "STUDENT LIST ERROR:",
-            error
-        )
-
-        flash(
-            "Unable to load student records.",
-            "danger"
-        )
-
-        student_list = []
-
-    finally:
-
-        if connection:
-
-            connection.close()
+    registered_students = db.execute(
+        """
+        SELECT
+            id,
+            roll_no,
+            name,
+            department,
+            year,
+            cgpa,
+            placement_probability,
+            profile_image,
+            profile_image_mimetype
+        FROM students
+        ORDER BY id DESC
+        """,
+        fetch=True
+    )
 
     return render_template(
         "students.html",
-        students=student_list
+        students=registered_students
     )
 
 
-# ============================================================
-# PROFILE PHOTO ROUTE
-# ============================================================
+# =========================================================
+# PERMANENT PROFILE PHOTO ROUTE
+# =========================================================
 
-@app.route(
-    "/uploads/<path:filename>"
-)
-def uploaded_file(filename):
-
-    # --------------------------------------------------------
-    # Only logged-in administrator can view uploaded photos.
-    # --------------------------------------------------------
+@app.route("/student-photo/<int:student_id>")
+def student_photo(student_id):
 
     if not session.get("admin"):
 
@@ -1370,40 +1141,54 @@ def uploaded_file(filename):
             url_for("login")
         )
 
-    # --------------------------------------------------------
-    # Prevent unsafe path access.
-    # --------------------------------------------------------
+    db = DatabaseConnection()
 
-    safe_name = secure_filename(
-        Path(filename).name
+    student = db.execute(
+        """
+        SELECT
+            profile_image,
+            profile_image_mimetype
+        FROM students
+        WHERE id = %s
+        """,
+        (student_id,),
+        fetchone=True
     )
 
-    if not safe_name:
+    if not student:
 
-        abort(404)
+        return (
+            "Student not found.",
+            404
+        )
 
-    file_path = (
-        UPLOAD_FOLDER
-        / safe_name
+    image_data = student.get(
+        "profile_image"
     )
 
-    if not file_path.exists():
+    mimetype = student.get(
+        "profile_image_mimetype"
+    )
 
-        abort(404)
+    if not image_data:
 
-    return send_from_directory(
-        str(UPLOAD_FOLDER),
-        safe_name
+        return (
+            "Profile photo not available.",
+            404
+        )
+
+    return send_file(
+        BytesIO(image_data),
+        mimetype=mimetype or "image/jpeg",
+        max_age=31536000
     )
 
 
-# ============================================================
-# STUDENT DETAILS / PREDICTION
-# ============================================================
+# =========================================================
+# STUDENT DETAIL / PREDICTION
+# =========================================================
 
-@app.route(
-    "/student/<int:student_id>"
-)
+@app.route("/student/<int:student_id>")
 def student_detail(student_id):
 
     if not session.get("admin"):
@@ -1412,46 +1197,19 @@ def student_detail(student_id):
             url_for("login")
         )
 
-    connection = None
+    db = DatabaseConnection()
 
-    try:
+    student = db.execute(
+        """
+        SELECT *
+        FROM students
+        WHERE id = %s
+        """,
+        (student_id,),
+        fetchone=True
+    )
 
-        connection = get_database()
-
-        student = connection.execute(
-            """
-            SELECT *
-            FROM students
-            WHERE id = ?
-            """,
-            (
-                student_id,
-            )
-        ).fetchone()
-
-    except Exception as error:
-
-        print(
-            "STUDENT DETAIL ERROR:",
-            error
-        )
-
-        flash(
-            "Unable to load student details.",
-            "danger"
-        )
-
-        return redirect(
-            url_for("students")
-        )
-
-    finally:
-
-        if connection:
-
-            connection.close()
-
-    if student is None:
+    if not student:
 
         flash(
             "Student not found.",
@@ -1468,9 +1226,9 @@ def student_detail(student_id):
     )
 
 
-# ============================================================
+# =========================================================
 # DELETE STUDENT
-# ============================================================
+# =========================================================
 
 @app.route(
     "/students/delete/<int:student_id>",
@@ -1484,139 +1242,102 @@ def delete_student(student_id):
             url_for("login")
         )
 
-    connection = None
+    db = DatabaseConnection()
 
-    profile_picture_name = None
+    student = db.execute(
+        """
+        SELECT id
+        FROM students
+        WHERE id = %s
+        """,
+        (student_id,),
+        fetchone=True
+    )
 
-    try:
-
-        connection = get_database()
-
-        # ----------------------------------------------------
-        # Get profile picture before deleting DB record.
-        # ----------------------------------------------------
-
-        student = connection.execute(
-            """
-            SELECT profile_picture
-            FROM students
-            WHERE id = ?
-            """,
-            (
-                student_id,
-            )
-        ).fetchone()
-
-        if student:
-
-            profile_picture_name = (
-                student["profile_picture"]
-            )
-
-        # ----------------------------------------------------
-        # Delete student.
-        # ----------------------------------------------------
-
-        connection.execute(
-            """
-            DELETE FROM students
-            WHERE id = ?
-            """,
-            (
-                student_id,
-            )
-        )
-
-        connection.commit()
-
-        connection.close()
-
-        connection = None
-
-        # ----------------------------------------------------
-        # Delete associated profile photo.
-        # ----------------------------------------------------
-
-        if profile_picture_name:
-
-            delete_profile_picture(
-                profile_picture_name
-            )
+    if not student:
 
         flash(
-            "Student deleted successfully.",
-            "success"
-        )
-
-    except Exception as error:
-
-        print(
-            "DELETE STUDENT ERROR:",
-            error
-        )
-
-        if connection:
-
-            try:
-                connection.rollback()
-            except Exception:
-                pass
-
-            try:
-                connection.close()
-            except Exception:
-                pass
-
-        flash(
-            "Unable to delete student.",
+            "Student not found.",
             "danger"
         )
+
+        return redirect(
+            url_for("students")
+        )
+
+    db.execute(
+        """
+        DELETE FROM students
+        WHERE id = %s
+        """,
+        (student_id,)
+    )
+
+    flash(
+        "Student and permanently stored profile photo deleted.",
+        "success"
+    )
 
     return redirect(
         url_for("students")
     )
 
 
-# ============================================================
+# =========================================================
 # HEALTH CHECK
-# ============================================================
+# =========================================================
 
 @app.route("/health")
 def health():
 
-    return {
-        "status": "ok"
-    }
+    try:
+
+        db = DatabaseConnection()
+
+        db.execute(
+            "SELECT 1",
+            fetchone=True
+        )
+
+        return jsonify({
+            "status": "ok",
+            "database": "connected",
+            "profile_storage": "PostgreSQL BYTEA"
+        })
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "database": str(error)
+        }), 500
 
 
-# ============================================================
-# MAXIMUM FILE SIZE ERROR
-# ============================================================
+# =========================================================
+# STARTUP
+# =========================================================
 
-@app.errorhandler(413)
-def file_too_large(error):
+try:
 
-    flash(
-        "Profile photo is too large. "
-        "Maximum allowed size is 5 MB.",
-        "danger"
+    initialize_database()
+
+    load_models()
+
+    print(
+        "Database initialized successfully."
     )
 
-    return redirect(
-        url_for("students")
+except Exception as error:
+
+    print(
+        "Database initialization error:",
+        error
     )
 
 
-# ============================================================
-# DATABASE INITIALIZATION
-# ============================================================
-
-initialize_database()
-
-
-# ============================================================
+# =========================================================
 # LOCAL DEVELOPMENT
-# ============================================================
+# =========================================================
 
 if __name__ == "__main__":
 
@@ -1628,5 +1349,5 @@ if __name__ == "__main__":
                 5000
             )
         ),
-        debug=True
+        debug=False
     )
