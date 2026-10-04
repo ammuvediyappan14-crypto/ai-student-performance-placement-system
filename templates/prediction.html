@@ -45,17 +45,18 @@ Student AI Prediction - AI Student System
 
             <div class="col-md-3 text-center">
 
-                {% if student["profile_picture"] %}
+                {% if student["profile_image"] %}
 
                 <img
                     src="{{ url_for(
-                        'uploaded_file',
-                        filename=student['profile_picture']
+                        'student_photo',
+                        student_id=student['id']
                     ) }}"
                     class="rounded-circle shadow"
                     width="150"
                     height="150"
                     style="object-fit: cover;"
+                    alt="Student Profile Photo"
                 >
 
                 {% else %}
