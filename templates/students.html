@@ -419,10 +419,10 @@ Student Registration - AI Student System
 
                         <td>
 
-                            {% if student["profile_picture"] or student["profile_picture"] %}
+                            {% if student["profile_image"] or student["profile_picture"] %}
 
                             <img
-                                src="{{ ( url_for('student_photo', student_id=student['id']) ) }}"
+                                src="{{ url_for('student_photo', student_id=student['id']) }}"
                                 width="50"
                                 height="50"
                                 class="rounded-circle"
