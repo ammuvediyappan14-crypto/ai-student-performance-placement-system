@@ -182,10 +182,7 @@ Dashboard - AI Student System
                             {% if student["profile_picture"] %}
 
                             <img
-                                src="{{ url_for(
-                                    'uploaded_file',
-                                    filename=student['profile_picture']
-                                ) }}"
+                                src="{{ url_for('student_photo', student_id=student['id']) }}"
                                 width="45"
                                 height="45"
                                 class="rounded-circle"
