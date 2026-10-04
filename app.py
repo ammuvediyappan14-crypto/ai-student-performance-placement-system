@@ -5,6 +5,7 @@ from io import BytesIO
 
 import numpy as np
 import psycopg2
+from psycopg2 import Binary
 from psycopg2.extras import RealDictCursor
 
 from flask import (
@@ -40,9 +41,6 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 
-# Legacy uploads folder.
-# This is used ONLY to recover old profile photos
-# if they still exist from the previous version.
 LEGACY_UPLOAD_FOLDER = BASE_DIR / "uploads"
 
 
@@ -68,6 +66,7 @@ class DatabaseConnection:
         self.connection = None
 
     def connect(self):
+
         if not DATABASE_URL:
             raise RuntimeError(
                 "DATABASE_URL environment variable is not configured."
@@ -91,6 +90,7 @@ class DatabaseConnection:
         self.connect()
 
         try:
+
             cursor = self.connection.cursor(
                 cursor_factory=RealDictCursor
             )
@@ -164,10 +164,11 @@ def initialize_database():
     db.execute(create_table_query)
 
     # -----------------------------------------------------
-    # MIGRATE EXISTING DATABASE
+    # MIGRATION FOR EXISTING DATABASE
     # -----------------------------------------------------
 
     migration_columns = {
+        "profile_picture": "TEXT",
         "profile_image": "BYTEA",
         "profile_image_mimetype": "TEXT",
         "performance_score": "REAL",
@@ -315,19 +316,15 @@ def calculate_fallback_prediction(data):
     )
 
     if performance_score >= 75:
-
         performance = "Excellent"
 
     elif performance_score >= 60:
-
         performance = "Good"
 
     elif performance_score >= 45:
-
         performance = "Average"
 
     else:
-
         performance = "Needs Improvement"
 
     placement_probability = round(
@@ -339,15 +336,12 @@ def calculate_fallback_prediction(data):
     )
 
     if placement_probability >= 75:
-
         placement_status = "High"
 
     elif placement_probability >= 50:
-
         placement_status = "Medium"
 
     else:
-
         placement_status = "Low"
 
     return (
@@ -515,7 +509,6 @@ def get_image_mimetype(filename):
     )
 
     if "." not in filename:
-
         return "application/octet-stream"
 
     extension = filename.rsplit(
@@ -533,21 +526,9 @@ def get_image_mimetype(filename):
 # LEGACY PHOTO RECOVERY
 # =========================================================
 
-def find_legacy_profile_image(
-    profile_picture
-):
-    """
-    Find an old profile image stored in the
-    previous local uploads folder.
-
-    Returns:
-        (image_bytes, mimetype)
-        or
-        (None, None)
-    """
+def find_legacy_profile_image(profile_picture):
 
     if not profile_picture:
-
         return None, None
 
     filename = secure_filename(
@@ -555,7 +536,6 @@ def find_legacy_profile_image(
     )
 
     if not filename:
-
         return None, None
 
     legacy_file = (
@@ -563,11 +543,9 @@ def find_legacy_profile_image(
     )
 
     if not legacy_file.exists():
-
         return None, None
 
     if not legacy_file.is_file():
-
         return None, None
 
     try:
@@ -584,7 +562,6 @@ def find_legacy_profile_image(
         return None, None
 
     if not image_data:
-
         return None, None
 
     mimetype = get_image_mimetype(
@@ -598,10 +575,6 @@ def migrate_legacy_profile_image(
     student_id,
     profile_picture
 ):
-    """
-    Recover an old local profile image and
-    permanently store it inside PostgreSQL BYTEA.
-    """
 
     image_data, mimetype = (
         find_legacy_profile_image(
@@ -610,7 +583,6 @@ def migrate_legacy_profile_image(
     )
 
     if not image_data:
-
         return False
 
     db = DatabaseConnection()
@@ -626,7 +598,7 @@ def migrate_legacy_profile_image(
             WHERE id = %s
             """,
             (
-                image_data,
+                Binary(image_data),
                 mimetype,
                 student_id,
             )
@@ -842,6 +814,157 @@ def dashboard():
 
 
 # =========================================================
+# STUDENT VALIDATION HELPER
+# =========================================================
+
+def get_student_form_data():
+
+    roll_no = request.form.get(
+        "roll_no",
+        ""
+    ).strip()
+
+    name = request.form.get(
+        "name",
+        ""
+    ).strip()
+
+    department = request.form.get(
+        "department",
+        ""
+    ).strip()
+
+    year = request.form.get(
+        "year",
+        ""
+    ).strip()
+
+    attendance = float(
+        request.form.get(
+            "attendance",
+            0
+        )
+    )
+
+    cgpa = float(
+        request.form.get(
+            "cgpa",
+            0
+        )
+    )
+
+    internal_marks = float(
+        request.form.get(
+            "internal_marks",
+            0
+        )
+    )
+
+    projects = int(
+        request.form.get(
+            "projects",
+            0
+        )
+    )
+
+    skills_score = float(
+        request.form.get(
+            "skills_score",
+            0
+        )
+    )
+
+    aptitude_score = float(
+        request.form.get(
+            "aptitude_score",
+            0
+        )
+    )
+
+    communication_score = float(
+        request.form.get(
+            "communication_score",
+            0
+        )
+    )
+
+    if not roll_no or not name:
+        raise ValueError(
+            "Roll number and student name are required."
+        )
+
+    if department not in [
+        "CS",
+        "IT",
+        "AI",
+        "BCA",
+        "BBA",
+        "B.COM",
+    ]:
+        raise ValueError(
+            "Invalid department."
+        )
+
+    if year not in [
+        "I",
+        "II",
+        "III",
+    ]:
+        raise ValueError(
+            "Invalid year."
+        )
+
+    if not 0 <= attendance <= 100:
+        raise ValueError(
+            "Attendance must be between 0 and 100."
+        )
+
+    if not 0 <= cgpa <= 10:
+        raise ValueError(
+            "CGPA must be between 0 and 10."
+        )
+
+    if not 0 <= internal_marks <= 100:
+        raise ValueError(
+            "Internal marks must be between 0 and 100."
+        )
+
+    if not 0 <= projects <= 20:
+        raise ValueError(
+            "Projects must be between 0 and 20."
+        )
+
+    if not 0 <= skills_score <= 100:
+        raise ValueError(
+            "Skills score must be between 0 and 100."
+        )
+
+    if not 0 <= aptitude_score <= 100:
+        raise ValueError(
+            "Aptitude score must be between 0 and 100."
+        )
+
+    if not 0 <= communication_score <= 100:
+        raise ValueError(
+            "Communication score must be between 0 and 100."
+        )
+
+    return {
+        "roll_no": roll_no,
+        "name": name,
+        "department": department,
+        "year": year,
+        "attendance": attendance,
+        "cgpa": cgpa,
+        "internal_marks": internal_marks,
+        "projects": projects,
+        "skills_score": skills_score,
+        "aptitude_score": aptitude_score,
+        "communication_score": communication_score,
+    }
+
+
+# =========================================================
 # STUDENT REGISTRATION
 # =========================================================
 
@@ -863,213 +986,7 @@ def students():
 
         try:
 
-            roll_no = request.form.get(
-                "roll_no",
-                ""
-            ).strip()
-
-            name = request.form.get(
-                "name",
-                ""
-            ).strip()
-
-            department = request.form.get(
-                "department",
-                ""
-            ).strip()
-
-            year = request.form.get(
-                "year",
-                ""
-            ).strip()
-
-            attendance = float(
-                request.form.get(
-                    "attendance",
-                    0
-                )
-            )
-
-            cgpa = float(
-                request.form.get(
-                    "cgpa",
-                    0
-                )
-            )
-
-            internal_marks = float(
-                request.form.get(
-                    "internal_marks",
-                    0
-                )
-            )
-
-            projects = int(
-                request.form.get(
-                    "projects",
-                    0
-                )
-            )
-
-            skills_score = float(
-                request.form.get(
-                    "skills_score",
-                    0
-                )
-            )
-
-            aptitude_score = float(
-                request.form.get(
-                    "aptitude_score",
-                    0
-                )
-            )
-
-            communication_score = float(
-                request.form.get(
-                    "communication_score",
-                    0
-                )
-            )
-
-            # -------------------------------------------------
-            # VALIDATION
-            # -------------------------------------------------
-
-            if not roll_no or not name:
-
-                flash(
-                    "Roll number and student name are required.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if department not in [
-                "CS",
-                "IT",
-                "AI",
-                "BCA",
-                "BBA",
-                "B.COM",
-            ]:
-
-                flash(
-                    "Invalid department.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if year not in [
-                "I",
-                "II",
-                "III",
-            ]:
-
-                flash(
-                    "Invalid year.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= attendance <= 100
-            ):
-
-                flash(
-                    "Attendance must be between 0 and 100.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= cgpa <= 10
-            ):
-
-                flash(
-                    "CGPA must be between 0 and 10.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= internal_marks <= 100
-            ):
-
-                flash(
-                    "Internal marks must be between 0 and 100.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= projects <= 20
-            ):
-
-                flash(
-                    "Projects must be between 0 and 20.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= skills_score <= 100
-            ):
-
-                flash(
-                    "Skills score must be between 0 and 100.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= aptitude_score <= 100
-            ):
-
-                flash(
-                    "Aptitude score must be between 0 and 100.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
-
-            if not (
-                0 <= communication_score <= 100
-            ):
-
-                flash(
-                    "Communication score must be between 0 and 100.",
-                    "danger"
-                )
-
-                return redirect(
-                    url_for("students")
-                )
+            data = get_student_form_data()
 
             # -------------------------------------------------
             # CHECK DUPLICATE ROLL NUMBER
@@ -1081,7 +998,7 @@ def students():
                 FROM students
                 WHERE roll_no = %s
                 """,
-                (roll_no,),
+                (data["roll_no"],),
                 fetchone=True
             )
 
@@ -1142,19 +1059,6 @@ def students():
                         url_for("students")
                     )
 
-                if len(profile_image) > (
-                    5 * 1024 * 1024
-                ):
-
-                    flash(
-                        "Profile image must be below 5 MB.",
-                        "danger"
-                    )
-
-                    return redirect(
-                        url_for("students")
-                    )
-
                 profile_image_mimetype = (
                     get_image_mimetype(
                         profile_file.filename
@@ -1165,72 +1069,26 @@ def students():
             # AI PREDICTION
             # -------------------------------------------------
 
-            prediction_data = {
-                "attendance": attendance,
-                "cgpa": cgpa,
-                "internal_marks": internal_marks,
-                "projects": projects,
-                "skills_score": skills_score,
-                "aptitude_score": aptitude_score,
-                "communication_score": communication_score,
-            }
-
             (
                 performance,
                 performance_score,
                 placement_probability,
                 placement_status,
-            ) = predict_student(
-                prediction_data
-            )
+            ) = predict_student(data)
 
             # -------------------------------------------------
-            # INSERT STUDENT
+            # INSERT
             # -------------------------------------------------
-
-            insert_query = """
-            INSERT INTO students (
-                roll_no,
-                name,
-                department,
-                profile_picture,
-                profile_image,
-                profile_image_mimetype,
-                year,
-                attendance,
-                cgpa,
-                internal_marks,
-                projects,
-                skills_score,
-                aptitude_score,
-                communication_score,
-                performance,
-                performance_score,
-                placement_probability,
-                placement_status
-            )
-            VALUES (
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s
-            )
-            RETURNING id
-            """
 
             result = db.execute(
-                insert_query,
-                (
+                """
+                INSERT INTO students (
                     roll_no,
                     name,
                     department,
-
-                    # Kept for compatibility
-                    None,
-
-                    # Permanent PostgreSQL storage
+                    profile_picture,
                     profile_image,
                     profile_image_mimetype,
-
                     year,
                     attendance,
                     cgpa,
@@ -1242,6 +1100,41 @@ def students():
                     performance,
                     performance_score,
                     placement_probability,
+                    placement_status
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s
+                )
+                RETURNING id
+                """,
+                (
+                    data["roll_no"],
+                    data["name"],
+                    data["department"],
+
+                    None,
+
+                    # IMPORTANT:
+                    # psycopg2.Binary guarantees BYTEA storage.
+                    Binary(profile_image)
+                    if profile_image
+                    else None,
+
+                    profile_image_mimetype,
+
+                    data["year"],
+                    data["attendance"],
+                    data["cgpa"],
+                    data["internal_marks"],
+                    data["projects"],
+                    data["skills_score"],
+                    data["aptitude_score"],
+                    data["communication_score"],
+                    performance,
+                    performance_score,
+                    placement_probability,
                     placement_status,
                 ),
                 fetchone=True
@@ -1250,7 +1143,7 @@ def students():
             student_id = result["id"]
 
             flash(
-                "Student registered successfully and profile photo saved permanently.",
+                "Student registered successfully.",
                 "success"
             )
 
@@ -1265,6 +1158,17 @@ def students():
 
             flash(
                 "Roll number already exists.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("students")
+            )
+
+        except ValueError as error:
+
+            flash(
+                str(error),
                 "danger"
             )
 
@@ -1318,7 +1222,7 @@ def students():
 
 
 # =========================================================
-# PERMANENT PROFILE PHOTO ROUTE
+# STUDENT PHOTO
 # =========================================================
 
 @app.route(
@@ -1355,10 +1259,6 @@ def student_photo(student_id):
             404
         )
 
-    # -----------------------------------------------------
-    # 1. PERMANENT BYTEA PHOTO
-    # -----------------------------------------------------
-
     image_data = student.get(
         "profile_image"
     )
@@ -1370,13 +1270,13 @@ def student_photo(student_id):
     if image_data:
 
         return send_file(
-            BytesIO(image_data),
+            BytesIO(bytes(image_data)),
             mimetype=mimetype or "image/jpeg",
-            max_age=31536000
+            max_age=0
         )
 
     # -----------------------------------------------------
-    # 2. RECOVER OLD PHOTO
+    # LEGACY PHOTO RECOVERY
     # -----------------------------------------------------
 
     old_photo_filename = student.get(
@@ -1394,7 +1294,6 @@ def student_photo(student_id):
 
         if migrated:
 
-            # Read again from PostgreSQL
             recovered_student = db.execute(
                 """
                 SELECT
@@ -1425,18 +1324,14 @@ def student_photo(student_id):
 
                     return send_file(
                         BytesIO(
-                            recovered_image
+                            bytes(recovered_image)
                         ),
                         mimetype=(
                             recovered_mimetype
                             or "image/jpeg"
                         ),
-                        max_age=31536000
+                        max_age=0
                     )
-
-    # -----------------------------------------------------
-    # PHOTO NOT FOUND
-    # -----------------------------------------------------
 
     return (
         "Profile photo not available.",
@@ -1445,7 +1340,7 @@ def student_photo(student_id):
 
 
 # =========================================================
-# STUDENT DETAIL / PREDICTION
+# STUDENT DETAIL
 # =========================================================
 
 @app.route(
@@ -1487,15 +1382,327 @@ def student_detail(student_id):
         student=student
     )
 
+
 # =========================================================
-# TEMPORARY PHOTO STATUS CHECK
+# EDIT STUDENT
 # =========================================================
 
-@app.route("/photo-status/<int:student_id>")
+@app.route(
+    "/student/<int:student_id>/edit",
+    methods=["GET", "POST"]
+)
+def edit_student(student_id):
+
+    if not session.get("admin"):
+
+        return redirect(
+            url_for("login")
+        )
+
+    db = DatabaseConnection()
+
+    student = db.execute(
+        """
+        SELECT *
+        FROM students
+        WHERE id = %s
+        """,
+        (student_id,),
+        fetchone=True
+    )
+
+    if not student:
+
+        flash(
+            "Student not found.",
+            "danger"
+        )
+
+        return redirect(
+            url_for("students")
+        )
+
+    if request.method == "GET":
+
+        return render_template(
+            "edit_student.html",
+            student=student
+        )
+
+    try:
+
+        data = get_student_form_data()
+
+        # -------------------------------------------------
+        # DUPLICATE ROLL NUMBER CHECK
+        # -------------------------------------------------
+
+        duplicate = db.execute(
+            """
+            SELECT id
+            FROM students
+            WHERE roll_no = %s
+            AND id != %s
+            """,
+            (
+                data["roll_no"],
+                student_id,
+            ),
+            fetchone=True
+        )
+
+        if duplicate:
+
+            flash(
+                "Roll number already exists.",
+                "danger"
+            )
+
+            return redirect(
+                url_for(
+                    "edit_student",
+                    student_id=student_id
+                )
+            )
+
+        # -------------------------------------------------
+        # AI PREDICTION AGAIN
+        # -------------------------------------------------
+
+        (
+            performance,
+            performance_score,
+            placement_probability,
+            placement_status,
+        ) = predict_student(data)
+
+        # -------------------------------------------------
+        # CHECK NEW PHOTO
+        # -------------------------------------------------
+
+        profile_file = request.files.get(
+            "profile_picture"
+        )
+
+        has_new_photo = (
+            profile_file
+            and profile_file.filename
+        )
+
+        if has_new_photo:
+
+            if not allowed_image(
+                profile_file.filename
+            ):
+
+                flash(
+                    "Only JPG, JPEG, PNG and WEBP images are allowed.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for(
+                        "edit_student",
+                        student_id=student_id
+                    )
+                )
+
+            profile_file.seek(0)
+
+            profile_image = (
+                profile_file.read()
+            )
+
+            if not profile_image:
+
+                flash(
+                    "The selected profile image is empty.",
+                    "danger"
+                )
+
+                return redirect(
+                    url_for(
+                        "edit_student",
+                        student_id=student_id
+                    )
+                )
+
+            profile_image_mimetype = (
+                get_image_mimetype(
+                    profile_file.filename
+                )
+            )
+
+            # -------------------------------------------------
+            # UPDATE WITH NEW PHOTO
+            # -------------------------------------------------
+
+            db.execute(
+                """
+                UPDATE students
+                SET
+                    roll_no = %s,
+                    name = %s,
+                    department = %s,
+                    profile_image = %s,
+                    profile_image_mimetype = %s,
+                    year = %s,
+                    attendance = %s,
+                    cgpa = %s,
+                    internal_marks = %s,
+                    projects = %s,
+                    skills_score = %s,
+                    aptitude_score = %s,
+                    communication_score = %s,
+                    performance = %s,
+                    performance_score = %s,
+                    placement_probability = %s,
+                    placement_status = %s
+                WHERE id = %s
+                """,
+                (
+                    data["roll_no"],
+                    data["name"],
+                    data["department"],
+                    Binary(profile_image),
+                    profile_image_mimetype,
+                    data["year"],
+                    data["attendance"],
+                    data["cgpa"],
+                    data["internal_marks"],
+                    data["projects"],
+                    data["skills_score"],
+                    data["aptitude_score"],
+                    data["communication_score"],
+                    performance,
+                    performance_score,
+                    placement_probability,
+                    placement_status,
+                    student_id,
+                )
+            )
+
+        else:
+
+            # -------------------------------------------------
+            # UPDATE WITHOUT TOUCHING EXISTING PHOTO
+            # -------------------------------------------------
+
+            db.execute(
+                """
+                UPDATE students
+                SET
+                    roll_no = %s,
+                    name = %s,
+                    department = %s,
+                    year = %s,
+                    attendance = %s,
+                    cgpa = %s,
+                    internal_marks = %s,
+                    projects = %s,
+                    skills_score = %s,
+                    aptitude_score = %s,
+                    communication_score = %s,
+                    performance = %s,
+                    performance_score = %s,
+                    placement_probability = %s,
+                    placement_status = %s
+                WHERE id = %s
+                """,
+                (
+                    data["roll_no"],
+                    data["name"],
+                    data["department"],
+                    data["year"],
+                    data["attendance"],
+                    data["cgpa"],
+                    data["internal_marks"],
+                    data["projects"],
+                    data["skills_score"],
+                    data["aptitude_score"],
+                    data["communication_score"],
+                    performance,
+                    performance_score,
+                    placement_probability,
+                    placement_status,
+                    student_id,
+                )
+            )
+
+        flash(
+            "Student details updated successfully.",
+            "success"
+        )
+
+        return redirect(
+            url_for(
+                "student_detail",
+                student_id=student_id
+            )
+        )
+
+    except psycopg2.errors.UniqueViolation:
+
+        flash(
+            "Roll number already exists.",
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "edit_student",
+                student_id=student_id
+            )
+        )
+
+    except ValueError as error:
+
+        flash(
+            str(error),
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "edit_student",
+                student_id=student_id
+            )
+        )
+
+    except Exception as error:
+
+        print(
+            "Student edit error:",
+            error
+        )
+
+        flash(
+            f"Unable to update student: {error}",
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "edit_student",
+                student_id=student_id
+            )
+        )
+
+
+# =========================================================
+# PHOTO STATUS
+# =========================================================
+
+@app.route(
+    "/photo-status/<int:student_id>"
+)
 def photo_status(student_id):
 
     if not session.get("admin"):
-        return redirect(url_for("login"))
+
+        return redirect(
+            url_for("login")
+        )
 
     db = DatabaseConnection()
 
@@ -1506,7 +1713,8 @@ def photo_status(student_id):
             name,
             profile_picture,
             CASE
-                WHEN profile_image IS NULL THEN 0
+                WHEN profile_image IS NULL
+                THEN 0
                 ELSE octet_length(profile_image)
             END AS image_size,
             profile_image_mimetype
@@ -1518,7 +1726,10 @@ def photo_status(student_id):
     )
 
     if not student:
-        return {"error": "Student not found"}, 404
+
+        return {
+            "error": "Student not found"
+        }, 404
 
     return {
         "id": student["id"],
@@ -1527,6 +1738,8 @@ def photo_status(student_id):
         "profile_image_size": student["image_size"],
         "profile_image_mimetype": student["profile_image_mimetype"]
     }
+
+
 # =========================================================
 # DELETE STUDENT
 # =========================================================
@@ -1604,7 +1817,7 @@ def health():
             "status": "ok",
             "database": "connected",
             "profile_storage": "PostgreSQL BYTEA",
-            "legacy_photo_recovery": "enabled"
+            "edit_student": "enabled"
         })
 
     except Exception as error:
