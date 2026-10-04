@@ -44,8 +44,6 @@ Student Registration - AI Student System
 
             <div class="row g-3">
 
-                <!-- ROLL NUMBER -->
-
                 <div class="col-md-6">
 
                     <label class="form-label fw-semibold">
@@ -62,8 +60,6 @@ Student Registration - AI Student System
 
                 </div>
 
-
-                <!-- STUDENT NAME -->
 
                 <div class="col-md-6">
 
@@ -82,8 +78,6 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- DEPARTMENT -->
-
                 <div class="col-md-6">
 
                     <label class="form-label fw-semibold">
@@ -100,36 +94,17 @@ Student Registration - AI Student System
                             Select Department
                         </option>
 
-                        <option value="CS">
-                            CS
-                        </option>
-
-                        <option value="IT">
-                            IT
-                        </option>
-
-                        <option value="AI">
-                            AI
-                        </option>
-
-                        <option value="BCA">
-                            BCA
-                        </option>
-
-                        <option value="BBA">
-                            BBA
-                        </option>
-
-                        <option value="B.COM">
-                            B.COM
-                        </option>
+                        <option value="CS">CS</option>
+                        <option value="IT">IT</option>
+                        <option value="AI">AI</option>
+                        <option value="BCA">BCA</option>
+                        <option value="BBA">BBA</option>
+                        <option value="B.COM">B.COM</option>
 
                     </select>
 
                 </div>
 
-
-                <!-- YEAR -->
 
                 <div class="col-md-6">
 
@@ -147,24 +122,14 @@ Student Registration - AI Student System
                             Select Year
                         </option>
 
-                        <option value="I">
-                            I
-                        </option>
-
-                        <option value="II">
-                            II
-                        </option>
-
-                        <option value="III">
-                            III
-                        </option>
+                        <option value="I">I</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
 
                     </select>
 
                 </div>
 
-
-                <!-- PROFILE PHOTO -->
 
                 <div class="col-md-12">
 
@@ -189,8 +154,6 @@ Student Registration - AI Student System
                 <hr class="my-3">
 
 
-                <!-- ATTENDANCE -->
-
                 <div class="col-md-6">
 
                     <label class="form-label fw-semibold">
@@ -210,8 +173,6 @@ Student Registration - AI Student System
 
                 </div>
 
-
-                <!-- CGPA -->
 
                 <div class="col-md-6">
 
@@ -233,8 +194,6 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- INTERNAL MARKS -->
-
                 <div class="col-md-6">
 
                     <label class="form-label fw-semibold">
@@ -254,8 +213,6 @@ Student Registration - AI Student System
 
                 </div>
 
-
-                <!-- PROJECTS -->
 
                 <div class="col-md-6">
 
@@ -277,8 +234,6 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- SKILLS SCORE -->
-
                 <div class="col-md-4">
 
                     <label class="form-label fw-semibold">
@@ -298,8 +253,6 @@ Student Registration - AI Student System
 
                 </div>
 
-
-                <!-- APTITUDE SCORE -->
 
                 <div class="col-md-4">
 
@@ -321,8 +274,6 @@ Student Registration - AI Student System
                 </div>
 
 
-                <!-- COMMUNICATION SCORE -->
-
                 <div class="col-md-4">
 
                     <label class="form-label fw-semibold">
@@ -342,8 +293,6 @@ Student Registration - AI Student System
 
                 </div>
 
-
-                <!-- SUBMIT -->
 
                 <div class="col-12 mt-4">
 
@@ -422,7 +371,10 @@ Student Registration - AI Student System
                             {% if student["profile_image"] or student["profile_picture"] %}
 
                             <img
-                                src="{{ url_for('student_photo', student_id=student['id']) }}"
+                                src="{{ url_for(
+                                    'student_photo',
+                                    student_id=student['id']
+                                ) }}"
                                 width="50"
                                 height="50"
                                 class="rounded-circle"
@@ -441,49 +393,35 @@ Student Registration - AI Student System
                         </td>
 
 
-                        <!-- ROLL NUMBER -->
-
                         <td>
                             {{ student["roll_no"] }}
                         </td>
 
-
-                        <!-- NAME -->
 
                         <td>
                             {{ student["name"] }}
                         </td>
 
 
-                        <!-- DEPARTMENT -->
-
                         <td>
                             {{ student["department"] }}
                         </td>
 
-
-                        <!-- YEAR -->
 
                         <td>
                             {{ student["year"] }}
                         </td>
 
 
-                        <!-- CGPA -->
-
                         <td>
                             {{ student["cgpa"] }}
                         </td>
 
 
-                        <!-- PLACEMENT -->
-
                         <td>
                             {{ student["placement_probability"] }}%
                         </td>
 
-
-                        <!-- ACTION -->
 
                         <td>
 
@@ -495,6 +433,16 @@ Student Registration - AI Student System
                                 class="btn btn-sm btn-primary"
                             >
                                 View
+                            </a>
+
+                            <a
+                                href="{{ url_for(
+                                    'edit_student',
+                                    student_id=student['id']
+                                ) }}"
+                                class="btn btn-sm btn-warning"
+                            >
+                                Edit
                             </a>
 
 
