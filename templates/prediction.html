@@ -45,7 +45,7 @@ Student AI Prediction - AI Student System
 
             <div class="col-md-3 text-center">
 
-                {% if student["profile_image"] %}
+                {% if student["profile_image"] or student["profile_picture"] %}
 
                 <img
                     src="{{ url_for(
