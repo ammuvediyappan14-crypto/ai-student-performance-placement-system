@@ -1487,7 +1487,46 @@ def student_detail(student_id):
         student=student
     )
 
+# =========================================================
+# TEMPORARY PHOTO STATUS CHECK
+# =========================================================
 
+@app.route("/photo-status/<int:student_id>")
+def photo_status(student_id):
+
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    db = DatabaseConnection()
+
+    student = db.execute(
+        """
+        SELECT
+            id,
+            name,
+            profile_picture,
+            CASE
+                WHEN profile_image IS NULL THEN 0
+                ELSE octet_length(profile_image)
+            END AS image_size,
+            profile_image_mimetype
+        FROM students
+        WHERE id = %s
+        """,
+        (student_id,),
+        fetchone=True
+    )
+
+    if not student:
+        return {"error": "Student not found"}, 404
+
+    return {
+        "id": student["id"],
+        "name": student["name"],
+        "profile_picture": student["profile_picture"],
+        "profile_image_size": student["image_size"],
+        "profile_image_mimetype": student["profile_image_mimetype"]
+    }
 # =========================================================
 # DELETE STUDENT
 # =========================================================
