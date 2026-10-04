@@ -110,9 +110,6 @@ Dashboard - AI Student System
 
 <div class="mb-4">
 
-    <!-- IMPORTANT -->
-    <!-- This directly opens /students -->
-
     <a
         href="{{ url_for('students') }}"
         class="btn btn-primary me-2"
@@ -179,7 +176,7 @@ Dashboard - AI Student System
 
                         <td>
 
-                            {% if student["profile_picture"] %}
+                            {% if student["profile_image"] or student["profile_picture"] %}
 
                             <img
                                 src="{{ url_for('student_photo', student_id=student['id']) }}"
@@ -187,6 +184,7 @@ Dashboard - AI Student System
                                 height="45"
                                 class="rounded-circle"
                                 style="object-fit: cover;"
+                                alt="Profile Photo"
                             >
 
                             {% else %}
